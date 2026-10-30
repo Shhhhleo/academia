@@ -1,0 +1,58 @@
+import "server-only"
+import { cookies } from "next/headers"
+import { cache } from "react"
+import { requireUser } from "@/lib/auth/session"
+import { overviewOf, withGrade } from "./to-engine"
+import type { Assessment, Component, Subject, Workspace } from "./types"
+
+export const YEAR_COOKIE = "academia-year"
+
+type SubjectRow = Subject & { components: Component[] | null; assessments: Assessment[] | null }
+
+/** Everything the signed-in user's pages need for the selected academic year. RLS scopes every query. */
+export const getWorkspace = cache(async (): Promise<Workspace> => {
+  const { user, supabase } = await requireUser()
+  const yearCookie = (await cookies()).get(YEAR_COOKIE)?.value
+
+  const [profileRes, yearsRes] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).single(),
+    supabase.from("academic_years").select("*").order("starts_on", { ascending: false }),
+  ])
+  if (profileRes.error || !profileRes.data) throw new Error("Your profile could not be loaded.")
+  const years = yearsRes.data ?? []
+  const year = years.find((y) => y.id === yearCookie) ?? years.find((y) => y.is_current) ?? years[0]
+  if (!year) throw new Error("No academic year found for this account.")
+
+  const { data, error } = await supabase
+    .from("subjects")
+    .select("*, components(*), assessments(*)")
+    .eq("academic_year_id", year.id)
+    .eq("archived", false)
+    .order("position")
+    .order("name")
+  if (error) throw new Error("Your subjects could not be loaded.")
+
+  const subjects = ((data ?? []) as SubjectRow[]).map((s) => {
+    const { components, assessments, ...subject } = s
+    return withGrade(subject, components ?? [], assessments ?? [])
+  })
+
+  return {
+    profile: profileRes.data,
+    years,
+    year,
+    subjects,
+    overview: overviewOf(subjects, profileRes.data),
+  }
+})
+
+export const getNotifications = cache(async () => {
+  const { supabase } = await requireUser()
+  const { data } = await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(20)
+  return data ?? []
+})
+
+export async function getSubject(id: string) {
+  const ws = await getWorkspace()
+  return ws.subjects.find((s) => s.id === id) ?? null
+}
