@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Canvas, extend, useFrame, type ThreeElement } from "@react-three/fiber"
+import { Canvas, extend, useFrame, useThree, type ThreeElement } from "@react-three/fiber"
 import { shaderMaterial } from "@react-three/drei"
 import * as THREE from "three"
 import { cn } from "@/lib/utils"
@@ -129,6 +129,8 @@ function ShaderPlane({ colorA, colorB, glow, speed }: ShaderPlaneProps) {
   const materialRef = useRef<WaveShaderMaterialImpl>(null)
   const mouse = useRef({ x: 0.5, y: 0.5 })
   const target = useRef(new THREE.Vector2(0.5, 0.5))
+  // Cover whatever the camera sees, whatever the container aspect ratio.
+  const viewport = useThree((state) => state.viewport)
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -157,7 +159,7 @@ function ShaderPlane({ colorA, colorB, glow, speed }: ShaderPlaneProps) {
   })
 
   return (
-    <mesh scale={[4, 4, 1]}>
+    <mesh scale={[viewport.width * 1.02, viewport.height * 1.02, 1]}>
       <planeGeometry args={[1, 1, 64, 64]} />
       <waveShaderMaterial ref={materialRef} key={WaveShaderMaterial.key} />
     </mesh>

@@ -43,3 +43,7 @@ next-env.d.ts
 
 # superpowers workspace
 .superpowers/
+
+# HyperFrames working artifacts
+video/**/.hyperframes/
+video/**/node_modules/

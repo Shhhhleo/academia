@@ -41,7 +41,7 @@ export function TargetCard({ subject }: { subject: SubjectWithGrade }) {
     const task = nextUpcoming ? `task (“${nextUpcoming.title}”)` : "task"
     headline =
       req.unit === "level"
-        ? `Aim for level ${req.required} or higher in every criterion`
+        ? `Aim for level ${req.required}${req.required === 8 ? "" : " or higher"} in every criterion`
         : `You need ${Math.ceil(req.required ?? 0)}% or more`
     detail = onTarget ? `On your next ${task} to stay at a ${target}. You’re on target now.` : `On your next ${task} to reach a ${target}.`
   }

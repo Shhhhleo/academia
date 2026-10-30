@@ -102,7 +102,9 @@ export default async function SubjectPage({ params }: PageProps<"/subjects/[id]"
           title="Grade history"
           description={
             points.length > 1
-              ? `From ${points[0].grade} to ${points[points.length - 1].grade} across ${points.length} graded tasks.`
+              ? points[0].grade === points[points.length - 1].grade
+                ? `Holding at ${points[0].grade} across ${points.length} graded tasks.`
+                : `From ${points[0].grade} to ${points[points.length - 1].grade} across ${points.length} graded tasks.`
               : "Your grade after each graded task appears here."
           }
           className="lg:col-span-3"

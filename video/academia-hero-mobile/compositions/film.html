@@ -1,0 +1,394 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Plus Jakarta Sans";
+      src: url("assets/fonts/plus-jakarta-sans-latin-700-normal.woff2") format("woff2");
+      font-weight: 700;
+    }
+    @font-face {
+      font-family: "Plus Jakarta Sans";
+      src: url("assets/fonts/plus-jakarta-sans-latin-800-normal.woff2") format("woff2");
+      font-weight: 800;
+    }
+    #root {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: #0b0c10;
+      font-family: "Inter", sans-serif;
+      color: #f5f5f5;
+      --card: #222329;
+      --border: #303137;
+      --muted: #a1a1aa;
+    }
+    /* Background plane: glow + dot grid, moves slowest */
+    #film-bg {
+      position: absolute;
+      inset: -120px;
+    }
+    #film-glow {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(60% 40% at 50% 42%, rgba(79, 70, 229, 0.28), rgba(79, 70, 229, 0) 70%),
+        radial-gradient(30% 30% at 78% 82%, rgba(165, 180, 252, 0.1), rgba(165, 180, 252, 0) 70%);
+    }
+    #film-dots {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1.2px);
+      background-size: 34px 34px;
+      mask-image: radial-gradient(60% 60% at 50% 45%, #000 30%, transparent 80%);
+    }
+    /* Camera: the subject plane */
+    #film-cam {
+      position: absolute;
+      inset: 0;
+      transform-origin: 540px 960px;
+    }
+    .card {
+      position: absolute;
+      width: 420px;
+      height: 236px;
+      padding: 22px 24px 18px;
+      border-radius: 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .card .bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 3px;
+    }
+    .card .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .card .name {
+      font-family: "Plus Jakarta Sans", sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    .card .sub {
+      margin-top: 3px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .card .badge {
+      font-size: 12px;
+      font-weight: 500;
+      color: #a5b4fc;
+      background: #23244a;
+      border: 1px dashed #a5b4fc;
+      border-radius: 999px;
+      padding: 3px 9px;
+      white-space: nowrap;
+    }
+    .card .mid {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+    .card .grade {
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 600;
+      font-size: 56px;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    .card .grade small {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
+    .card .trend {
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .card .trend.up {
+      color: #34d399;
+    }
+    .card .foot {
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .card .foot b {
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 500;
+      color: #f5f5f5;
+    }
+    .card .foot .tgt {
+      color: #fbbf24;
+      font-weight: 500;
+    }
+    .spark path {
+      fill: none;
+      stroke-width: 2.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    /* Foreground plane: chips, move fastest */
+    #film-fg {
+      position: absolute;
+      inset: 0;
+    }
+    .chip {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: rgba(34, 35, 41, 0.92);
+      border: 1px solid #3a3b42;
+      box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.8);
+      font-size: 18px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .chip i {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: block;
+    }
+    .chip b {
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 600;
+    }
+    /* The product, captured from the real app */
+    #film-frame {
+      position: absolute;
+      left: 240px;
+      top: 110px;
+      width: 600px;
+      height: 1298px;
+      border-radius: 44px;
+      outline: 10px solid #1a1b20;
+      overflow: hidden;
+      background: #101114;
+      border: 1px solid #34353c;
+      box-shadow:
+        0 60px 120px -40px rgba(0, 0, 0, 0.85),
+        0 0 0 1px rgba(255, 255, 255, 0.02);
+    }
+    #film-chrome {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      background: #17181d;
+      border-bottom: 1px solid #2a2b31;
+    }
+    #film-chrome span {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #3a3b42;
+    }
+    #film-url {
+      margin-left: 18px;
+      height: 22px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: #0f1014;
+      color: #8b8b94;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+    }
+    #film-shot {
+      display: block;
+      width: 600px;
+      height: 1298px;
+    }
+  </style>
+
+  <div id="root" data-composition-id="film" data-width="1080" data-height="1920">
+    <div id="film-bg" data-layout-ignore>
+      <div id="film-glow"></div>
+      <div id="film-dots"></div>
+    </div>
+
+    <div id="film-frame" data-layout-allow-overflow>
+      <img id="film-shot" src="assets/dashboard-mobile-dark.png" alt="" />
+    </div>
+
+    <div id="film-cam" data-layout-allow-overflow data-layout-allow-overlap>
+      <!-- Row 1 -->
+      <div class="card" id="c-fr" style="left: 554px; top: 578px">
+        <div class="bar" style="background: #d95926"></div>
+        <div class="head">
+          <div><div class="name">French</div><div class="sub">MYP · Language acquisition</div></div>
+          <div class="badge">Estimated</div>
+        </div>
+        <div class="mid">
+          <div><div class="grade" id="g-fr">–<small>/7</small></div><div class="trend">→ No change</div></div>
+          <svg class="spark" width="110" height="40"><path id="s-fr" d="M4 20 L56 20 L106 20" stroke="#d95926" /></svg>
+        </div>
+        <div class="foot"><span><b>3</b> assessments</span><span class="tgt">◎ Target 6 (−1)</span></div>
+      </div>
+
+      <div class="card" id="c-ll" style="left: 106px; top: 578px">
+        <div class="bar" style="background: #3987e5"></div>
+        <div class="head">
+          <div><div class="name">Language and Literature</div><div class="sub">MYP · Language and literature</div></div>
+          <div class="badge" id="b-ll">Estimated</div>
+        </div>
+        <div class="mid">
+          <div><div class="grade" id="g-ll">–<small>/7</small></div><div class="trend up" id="t-ll">↗ Up 1 since last task</div></div>
+          <svg class="spark" width="110" height="40"><path id="s-ll" d="M4 26 L106 10" stroke="#3987e5" /></svg>
+        </div>
+        <div class="foot"><span><b>3</b> assessments</span><span class="tgt" id="f-ll">◎ Target 7 (−1)</span></div>
+      </div>
+
+      <div class="card" id="c-is" style="left: 106px; top: 842px">
+        <div class="bar" style="background: #199e70"></div>
+        <div class="head">
+          <div><div class="name">Individuals and Societies</div><div class="sub">MYP · Individuals and societies</div></div>
+        </div>
+        <div class="mid">
+          <div><div class="grade" id="g-is">–<small>/7</small></div><div class="trend up">↗ Up 1 since last task</div></div>
+          <svg class="spark" width="110" height="40"><path id="s-is" d="M4 26 L106 14" stroke="#199e70" /></svg>
+        </div>
+        <div class="foot"><span><b>3</b> assessments</span><span class="tgt">◎ Target 6 (−1)</span></div>
+      </div>
+
+      <!-- Row 2 -->
+      <div class="card" id="c-sc" style="left: 554px; top: 842px">
+        <div class="bar" style="background: #c98500"></div>
+        <div class="head">
+          <div><div class="name">Sciences</div><div class="sub">MYP · Sciences</div></div>
+          <div class="badge">Estimated</div>
+        </div>
+        <div class="mid">
+          <div><div class="grade" id="g-sc">–<small>/7</small></div><div class="trend">→ No change</div></div>
+          <svg class="spark" width="110" height="40"><path id="s-sc" d="M4 14 L106 14" stroke="#c98500" /></svg>
+        </div>
+        <div class="foot"><span><b>3</b> assessments</span><span class="tgt">◎ Target 7 (−1)</span></div>
+      </div>
+
+      <div class="card" id="c-ma" style="left: 106px; top: 1106px">
+        <div class="bar" style="background: #d55181"></div>
+        <div class="head">
+          <div><div class="name">Mathematics</div><div class="sub">MYP · Mathematics</div></div>
+          <div class="badge">Estimated</div>
+        </div>
+        <div class="mid">
+          <div><div class="grade" id="g-ma">–<small>/7</small></div><div class="trend up">↗ Up 1 since last task</div></div>
+          <svg class="spark" width="110" height="40"><path id="s-ma" d="M4 30 L56 26 L106 18" stroke="#d55181" /></svg>
+        </div>
+        <div class="foot"><span><b>4</b> assessments</span><span class="tgt">◎ Target 7 (−2)</span></div>
+      </div>
+
+      <div class="card" id="c-de" style="left: 554px; top: 1106px">
+        <div class="bar" style="background: #e66767"></div>
+        <div class="head">
+          <div><div class="name">Design</div><div class="sub">MYP · Design</div></div>
+          <div class="badge">Estimated · partial</div>
+        </div>
+        <div class="mid">
+          <div><div class="grade" id="g-de">–<small>/7</small></div><div class="trend">→ No change</div></div>
+          <svg class="spark" width="110" height="40"><path id="s-de" d="M4 20 L106 20" stroke="#e66767" /></svg>
+        </div>
+        <div class="foot"><span><b>3</b> assessments</span><span class="tgt">◎ Target 6 (−1)</span></div>
+      </div>
+    </div>
+
+    <div id="film-fg" data-layout-allow-overflow data-layout-allow-overlap>
+      <div class="chip" id="ch-up" style="left: 470px; top: 486px"><i style="background: #34d399"></i>English essay <b>A7 B6 C6 D7</b></div>
+      <div class="chip" id="ch-target" style="left: 70px; top: 1400px"><i style="background: #fbbf24"></i>Mathematics: <b>7</b> needs level 7+ next task</div>
+      <div class="chip" id="ch-sync" style="left: 380px; top: 1484px"><i style="background: #818cf8"></i>ManageBac synced · <b>3</b> new deadlines</div>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true })
+    const count = (sel, to, at, dur) => {
+      const el = document.querySelector(sel)
+      const proxy = { v: 0 }
+      tl.fromTo(
+        proxy,
+        { v: 0 },
+        {
+          v: to,
+          duration: dur,
+          ease: "power2.out",
+          onUpdate: () => {
+            el.firstChild.nodeValue = proxy.v < 0.5 ? "–" : String(Math.round(proxy.v))
+          },
+        },
+        at,
+      )
+    }
+    const draw = (sel, at) => {
+      const p = document.querySelector(sel)
+      const len = Math.ceil(p.getTotalLength()) + 2
+      tl.fromTo(p, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.7, ease: "power2.inOut" }, at)
+    }
+
+    // Background plane drifts slowest
+    tl.fromTo("#film-bg", { scale: 1.18, y: 40 }, { scale: 1, y: 0, duration: 6.2, ease: "power2.inOut" }, 0)
+
+    // Act A (0–3.0): close-up on one subject; its grade counts up.
+    tl.fromTo("#film-cam", { scale: 2.2, x: 492.8, y: 580.8 }, { scale: 2.2, x: 492.8, y: 580.8, duration: 0.01 }, 0)
+    tl.fromTo("#c-ll", { opacity: 0.3, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.9, ease: "power3.out" }, 0.35)
+    tl.fromTo(["#b-ll", "#t-ll", "#f-ll"], { opacity: 0, filter: "blur(6px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.18, stagger: 0.12, ease: "power4.out" }, 2.1)
+    count("#g-ll", 6, 1.05, 1.15)
+    draw("#s-ll", 1.5)
+
+    // Act B (3.0–5.8): camera pulls back; the rest of the year lands around it.
+    tl.to("#film-cam", { scale: 1, x: 0, y: 0, duration: 1.6, ease: "power2.inOut" }, 3.0)
+    tl.fromTo(
+      ["#c-fr", "#c-is", "#c-sc", "#c-ma", "#c-de"],
+      { opacity: 0, scale: 0.94, y: 24, filter: "blur(8px)" },
+      { opacity: 1, scale: 1, y: 0, filter: "blur(0px)", duration: 0.65, stagger: 0.08, ease: "expo.out" },
+      3.35,
+    )
+    count("#g-fr", 5, 3.6, 0.8)
+    count("#g-is", 5, 3.68, 0.8)
+    count("#g-sc", 6, 3.76, 0.8)
+    count("#g-ma", 5, 3.84, 0.8)
+    count("#g-de", 5, 3.92, 0.8)
+    ;["#s-fr", "#s-is", "#s-sc", "#s-ma", "#s-de"].forEach((s, i) => draw(s, 3.75 + i * 0.08))
+
+    // Foreground chips: enter later and travel further than the cards (parallax depth)
+    tl.fromTo("#ch-up", { opacity: 0, y: 70, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, 3.9)
+    tl.fromTo("#ch-target", { opacity: 0, y: 90, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, 4.05)
+    tl.fromTo("#ch-sync", { opacity: 0, y: 90, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, 4.2)
+    tl.to("#film-fg", { y: -60, duration: 2.0, ease: "none" }, 3.9)
+
+    // Act C (5.7–6.8): every card is carried into the Average grade tile of the real mobile dashboard as it builds around them.
+    tl.to(["#ch-up", "#ch-target", "#ch-sync"], { opacity: 0, filter: "blur(8px)", duration: 0.22, stagger: 0.04, ease: "power3.in" }, 5.7)
+    const rows = { "#c-ll": 617, "#c-fr": 617, "#c-is": 617, "#c-sc": 617, "#c-ma": 617, "#c-de": 617 }
+    const centers = { "#c-ll": [316, 696], "#c-fr": [764, 696], "#c-is": [316, 960], "#c-sc": [764, 960], "#c-ma": [316, 1224], "#c-de": [764, 1224] }
+    Object.entries(rows).forEach(([sel, rowY], i) => {
+      const [cx, cy] = centers[sel]
+      tl.to(sel, { x: 398 - cx, y: rowY - cy, scale: 0.07, opacity: 0, filter: "blur(4px)", duration: 0.7, ease: "power3.in" }, 5.8 + i * 0.04)
+    })
+    tl.fromTo("#film-frame", { opacity: 0, scale: 1.06, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.85, ease: "power3.out" }, 5.95)
+    // 6.8–9.5: the product holds dead still for the tagline that sits over it.
+    tl.set({}, {}, 9.5)
+
+    window.__timelines["film"] = tl
+  </script>
+</template>
