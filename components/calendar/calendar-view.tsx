@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { addDays, addMonths, addWeeks, format, formatDistanceToNow, isSameMonth, parseISO, startOfWeek } from "date-fns"
 import { ChevronLeft, ChevronRight, Link2, Loader2, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
@@ -18,7 +18,6 @@ import { MonthGrid, monthGridDays } from "./month-grid"
 import { WeekGrid } from "./week-grid"
 
 export type CalendarMode = "month" | "week" | "agenda"
-const STALE_MS = 6 * 60 * 60 * 1000
 
 export function CalendarView({
   events,
@@ -45,7 +44,6 @@ export function CalendarView({
   const [dayList, setDayList] = useState<string | null>(null)
   const [form, setForm] = useState<{ date?: string; event?: CalendarEvent } | null>(null)
   const [syncing, startSync] = useTransition()
-  const autoSynced = useRef(false)
 
   const all = useMemo(() => buildItems(subjects, events), [subjects, events])
   const items = all.filter((i) => !hiddenSources.has(i.source) && !(i.subjectId && hiddenSubjects.has(i.subjectId)))
@@ -55,27 +53,17 @@ export function CalendarView({
     router.push(`${pathname}?view=${nextView}&date=${d}`, { scroll: false })
   }
 
-  const sync = (quiet = false) =>
+  const sync = () =>
     startSync(async () => {
       const r = await syncManageBacNow()
       if (!r.ok) {
-        if (!quiet) toast.error(r.error)
+        toast.error(r.error)
         return
       }
-      if (!quiet || r.added > 0) toast.success(r.added ? `Synced ManageBac: ${r.added} new` : "ManageBac is up to date")
+      toast.success(r.added ? `Synced ManageBac: ${r.added} new` : "ManageBac is up to date")
       router.refresh()
     })
 
-  useEffect(() => {
-    if (autoSynced.current || !integration.connected) return
-    const last = integration.lastSyncedAt ? new Date(integration.lastSyncedAt).getTime() : 0
-    if (Date.now() - last > STALE_MS) {
-      autoSynced.current = true
-      sync(true)
-    }
-    // run once per mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const step = (dir: 1 | -1) => go(view === "month" ? addMonths(anchor, dir) : view === "week" ? addWeeks(anchor, dir) : addDays(anchor, dir * 30))
   const title =

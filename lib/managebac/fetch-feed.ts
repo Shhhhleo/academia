@@ -1,7 +1,7 @@
 import "server-only"
 import { normalizeFeedUrl, type FeedUrlResult } from "./feed-url"
 
-const MAX_BYTES = 2 * 1024 * 1024
+const DEFAULT_MAX_BYTES = 2 * 1024 * 1024
 const MAX_REDIRECTS = 3
 const TIMEOUT_MS = 10_000
 
@@ -9,10 +9,15 @@ export class FeedError extends Error {}
 
 /**
  * Fetches a ManageBac iCal feed. Every hop (including redirects) is re-validated
- * against the ManageBac host allow-list, the response is capped at 2 MB, and the
+ * against the host allow-list, the response is capped (2 MB unless `maxBytes` says otherwise), and the
  * whole request times out after 10 s.
  */
-export async function fetchFeed(initialUrl: string, validate: (url: string) => FeedUrlResult = normalizeFeedUrl, source = "ManageBac"): Promise<string> {
+export async function fetchFeed(
+  initialUrl: string,
+  validate: (url: string) => FeedUrlResult = normalizeFeedUrl,
+  source = "ManageBac",
+  maxBytes = DEFAULT_MAX_BYTES,
+): Promise<string> {
   let url = initialUrl
   const signal = AbortSignal.timeout(TIMEOUT_MS)
 
@@ -46,7 +51,7 @@ export async function fetchFeed(initialUrl: string, validate: (url: string) => F
     if (!res.ok) throw new FeedError(`${source} responded with an error (${res.status}).`)
 
     const declared = Number(res.headers.get("content-length") ?? 0)
-    if (declared > MAX_BYTES) throw new FeedError("That calendar is too large to import.")
+    if (declared > maxBytes) throw new FeedError("That calendar is too large to import.")
     if (!res.body) throw new FeedError(`${source} returned an empty calendar.`)
 
     const reader = res.body.getReader()
@@ -56,7 +61,7 @@ export async function fetchFeed(initialUrl: string, validate: (url: string) => F
       const { done, value } = await reader.read()
       if (done) break
       size += value.byteLength
-      if (size > MAX_BYTES) {
+      if (size > maxBytes) {
         await reader.cancel()
         throw new FeedError("That calendar is too large to import.")
       }

@@ -25,8 +25,10 @@ export default function PrivacyPage() {
       <h2>What we store</h2>
       <ul>
         <li><strong>Account details:</strong> your email address, the name you choose, your IB programme and optional school and year group.</li>
-        <li><strong>Academic records you enter:</strong> subjects, assessments, criterion levels, scores, goals, calendar events and notes.</li>
+        <li><strong>Academic records you enter:</strong> subjects, assessments, criterion levels, scores, goals, calendar events, study sessions, to-dos, reminders and notes.</li>
         <li><strong>ManageBac calendar link</strong> (only if you connect it): encrypted with AES-256-GCM before storage, used only to fetch your calendar, and never shown back in full.</li>
+        <li><strong>Google Calendar secret address</strong> (only if you connect it): stored and protected the same way as the ManageBac link.</li>
+        <li><strong>Your Academia calendar link</strong> (only if you create one): we keep only a fingerprint of it, not the link itself. Anyone you give the link to can see the titles, dates and notes of your assessments, events, reminders and to-dos, so share it only with calendars you own. You can turn it off at any time.</li>
         <li><strong>Preferences:</strong> theme, accent colour, density and grading defaults.</li>
       </ul>
 
@@ -52,7 +54,7 @@ export default function PrivacyPage() {
       <h2>Your choices</h2>
       <ul>
         <li>Export everything as JSON or your assessments as CSV from <Link href="/settings">Settings</Link>.</li>
-        <li>Disconnect ManageBac at any time; you can also remove everything it imported.</li>
+        <li>Disconnect ManageBac or Google Calendar at any time; you can also remove everything they imported.</li>
         <li>Delete your account from Settings. This permanently removes your account and all associated records.</li>
       </ul>
 

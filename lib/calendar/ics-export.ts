@@ -1,10 +1,10 @@
 export type ExportItem =
-  | { uid: string; title: string; allDay: true; date: string; description?: string | null }
+  | { uid: string; title: string; allDay: true; date: string; /** Inclusive last day of a multi-day event. */ endDate?: string | null; description?: string | null }
   | { uid: string; title: string; allDay: false; start: string; end: string | null; description?: string | null }
 
-/** RFC 5545 TEXT escaping. */
+/** RFC 5545 TEXT escaping (a lone CR counts as a line break, so it can't start a new property). */
 export function escapeText(s: string) {
-  return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n")
+  return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n")
 }
 
 /** Folds a content line to 75 octets with CRLF + space continuation. */
@@ -47,7 +47,8 @@ export function buildIcs({ name, stamp, items }: { name: string; stamp: string; 
   for (const it of items) {
     lines.push("BEGIN:VEVENT", `UID:${it.uid}@academia`, `DTSTAMP:${utc(stamp)}`)
     if (it.allDay) {
-      lines.push(`DTSTART;VALUE=DATE:${dateOnly(it.date)}`, `DTEND;VALUE=DATE:${dateOnly(nextDay(it.date))}`)
+      const last = it.endDate && it.endDate > it.date ? it.endDate : it.date
+      lines.push(`DTSTART;VALUE=DATE:${dateOnly(it.date)}`, `DTEND;VALUE=DATE:${dateOnly(nextDay(last))}`)
     } else {
       const end = it.end ?? new Date(Date.parse(it.start) + 30 * 60_000).toISOString()
       lines.push(`DTSTART:${utc(it.start)}`, `DTEND:${utc(end)}`)

@@ -38,7 +38,7 @@ export default async function ManageBacPage() {
             <p className="py-6 text-center text-sm text-muted-foreground">No imports yet.</p>
           ) : (
             <table className="w-full text-sm">
-              <caption className="sr-only">Recent ManageBac syncs and CSV imports</caption>
+              <caption className="sr-only">Recent calendar syncs and CSV imports</caption>
               <thead className="text-left text-xs text-muted-foreground">
                 <tr>
                   <th scope="col" className="pb-2 font-medium">When</th>
@@ -50,7 +50,7 @@ export default async function ManageBacPage() {
                 {runs.map((r) => (
                   <tr key={r.id}>
                     <td className="py-2 font-mono text-xs tabular">{format(new Date(r.started_at), "d MMM, HH:mm")}</td>
-                    <td className="py-2">{r.kind === "csv" ? "CSV" : "ManageBac"}</td>
+                    <td className="py-2">{r.kind === "csv" ? "CSV" : r.kind === "google" ? "Google Calendar" : "ManageBac"}</td>
                     <td className="py-2 text-xs">
                       {r.status === "success" ? (
                         <span className="text-success-text">

@@ -29,7 +29,8 @@ export default async function BriefPage({ searchParams }: PageProps<"/brief">) {
   const days = [1, 3, 5, 7].includes(requested) ? requested : profile.brief_days
   const today = localDay(new Date(), profile.timezone)
 
-  const [events, todos, reminders, sessions] = await Promise.all([getEvents(today, addDays(today, days)), getTodos(), getReminders(), getStudySessions()])
+  // Timed events are stored in UTC, so pad a day each side; buildBrief keeps only the student's local days.
+  const [events, todos, reminders, sessions] = await Promise.all([getEvents(addDays(today, -1), addDays(today, days + 1)), getTodos(), getReminders(), getStudySessions()])
   const streak = computeStreak(dailyTotals(sessions), profile.daily_study_goal_minutes, today)
 
   const brief = buildBrief({

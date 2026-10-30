@@ -1,10 +1,13 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { requireUser } from "@/lib/auth/session"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { parseGradesCsv } from "@/lib/csv/parse-grades"
+import { YEAR_COOKIE } from "@/lib/data/queries"
 import type { ActionResult } from "@/lib/data/schemas"
+import { importYearId } from "@/lib/data/year"
 import { normalizeFeedUrl } from "./feed-url"
 import { syncManageBac, type SyncResult } from "./sync"
 
@@ -61,7 +64,10 @@ export async function importGradesCsv(text: string, dryRun: boolean): Promise<Cs
   if (typeof text !== "string" || text.length > 512_000) return { ok: false, error: "That file is too large (max 500 KB)." }
   const { rows, errors } = parseGradesCsv(text)
   const { supabase } = await requireUser()
-  const { data: subjects } = await supabase.from("subjects").select("id, name, programme").eq("archived", false)
+  const yearId = await importYearId(supabase, (await cookies()).get(YEAR_COOKIE)?.value)
+  const { data: subjects } = yearId
+    ? await supabase.from("subjects").select("id, name, programme").eq("archived", false).eq("academic_year_id", yearId)
+    : { data: [] }
   const byName = new Map((subjects ?? []).map((s) => [s.name.trim().toLowerCase(), s]))
 
   const problems = [...errors]

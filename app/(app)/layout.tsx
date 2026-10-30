@@ -1,17 +1,18 @@
 import type { Metadata } from "next"
 import { AppShell } from "@/components/app/app-shell"
 import { BriefScheduler } from "@/components/app/brief-scheduler"
+import { IntegrationsAutoSync } from "@/components/app/integrations-auto-sync"
 import { PrefsSync } from "@/components/app/prefs-sync"
 import { ShellProvider } from "@/components/app/shell-context"
 import { getSessionUser } from "@/lib/auth/session"
-import { getNotifications, getReminders, getWorkspace } from "@/lib/data/queries"
+import { getLinkedFeeds, getNotifications, getReminders, getWorkspace } from "@/lib/data/queries"
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
-  const [ws, notifications, user, reminders] = await Promise.all([getWorkspace(), getNotifications(), getSessionUser(), getReminders()])
+  const [ws, notifications, user, reminders, linked] = await Promise.all([getWorkspace(), getNotifications(), getSessionUser(), getReminders(), getLinkedFeeds()])
 
   return (
     <ShellProvider
@@ -31,6 +32,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         timezone={ws.profile.timezone}
         reminders={reminders.filter((r) => !r.done_at).map((r) => ({ id: r.id, title: r.title, remind_at: r.remind_at }))}
       />
+      <IntegrationsAutoSync linked={linked} />
       <AppShell>{children}</AppShell>
     </ShellProvider>
   )

@@ -29,13 +29,22 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  const tables = ["profiles", "academic_years", "subjects", "components", "assessments", "goals", "events", "notifications"] as const
-  const results = await Promise.all(tables.map((t) => supabase.from(t).select("*")))
+  const tables = ["profiles", "academic_years", "subjects", "components", "assessments", "goals", "events", "notifications", "study_sessions", "todos", "reminders"] as const
+  // The API returns at most 1,000 rows per request, so page through each table.
+  const all = async (t: (typeof tables)[number]) => {
+    const rows: unknown[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase.from(t).select("*").range(from, from + 999)
+      rows.push(...(data ?? []))
+      if (!data || data.length < 1000) return rows
+    }
+  }
+  const results = await Promise.all(tables.map(all))
   const { data: integrations } = await supabase.from("integrations").select("provider, feed_host, status, last_synced_at")
   const payload = {
     exportedAt: new Date().toISOString(),
     account: { id: user.id, email: user.email },
-    ...Object.fromEntries(tables.map((t, i) => [t, results[i].data ?? []])),
+    ...Object.fromEntries(tables.map((t, i) => [t, results[i]])),
     integrations: integrations ?? [],
   }
   return new NextResponse(JSON.stringify(payload, null, 2), {

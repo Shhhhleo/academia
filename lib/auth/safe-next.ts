@@ -21,6 +21,8 @@ export function safeNextPath(next: string | null | undefined, fallback = "/dashb
   try {
     const url = new URL(next, BASE)
     if (url.origin !== BASE) return fallback
+    // Dot-segments ("/..//evil.com") normalise to "//evil.com", which a later redirect would treat as off-site.
+    if (url.pathname.startsWith("//") || url.pathname.startsWith("/\\")) return fallback
     return `${url.pathname}${url.search}${url.hash}`
   } catch {
     return fallback

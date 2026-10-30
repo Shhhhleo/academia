@@ -74,6 +74,15 @@ export const getEvents = cache(async (from: string, to: string) => {
   return data ?? []
 })
 
+/** Linked calendar feeds and when each last synced, for background refresh. */
+export const getLinkedFeeds = cache(async () => {
+  const { supabase } = await requireUser()
+  const { data } = await supabase.from("integrations").select("provider, last_synced_at").not("feed_host", "is", null)
+  return (data ?? [])
+    .filter((i) => i.provider === "managebac" || i.provider === "google")
+    .map((i) => ({ provider: i.provider as "managebac" | "google", lastSyncedAt: i.last_synced_at }))
+})
+
 export async function getSubject(id: string) {
   const ws = await getWorkspace()
   return ws.subjects.find((s) => s.id === id) ?? null
