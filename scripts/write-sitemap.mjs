@@ -1,4 +1,4 @@
-// Writes seo/sitemap.xml and seo/robots.txt for the production domain (for Google Search Console).
+// Writes seo/sitemap.xml and seo/README.md for the production domain (for Google Search Console).
 // Usage: node scripts/write-sitemap.mjs https://your-domain.vercel.app
 import { mkdirSync, writeFileSync } from "node:fs"
 
