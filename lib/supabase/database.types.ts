@@ -7,6 +7,132 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendar_feeds: {
+        Row: {
+          created_at: string
+          id: string
+          last_accessed_at: string | null
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_accessed_at?: string | null
+          token_hash: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_accessed_at?: string | null
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reminders: {
+        Row: {
+          created_at: string
+          done_at: string | null
+          id: string
+          notes: string | null
+          remind_at: string
+          subject_id: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          done_at?: string | null
+          id?: string
+          notes?: string | null
+          remind_at: string
+          subject_id?: string | null
+          title: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          done_at?: string | null
+          id?: string
+          notes?: string | null
+          remind_at?: string
+          subject_id?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      study_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          minutes: number
+          note: string | null
+          started_at: string | null
+          studied_on: string
+          subject_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          minutes: number
+          note?: string | null
+          started_at?: string | null
+          studied_on: string
+          subject_id?: string | null
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          minutes?: number
+          note?: string | null
+          started_at?: string | null
+          studied_on?: string
+          subject_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      todos: {
+        Row: {
+          created_at: string
+          done_at: string | null
+          due_on: string | null
+          id: string
+          notes: string | null
+          priority: number
+          subject_id: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          done_at?: string | null
+          due_on?: string | null
+          id?: string
+          notes?: string | null
+          priority?: number
+          subject_id?: string | null
+          title: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          done_at?: string | null
+          due_on?: string | null
+          id?: string
+          notes?: string | null
+          priority?: number
+          subject_id?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       academic_years: {
         Row: {
           created_at: string
@@ -389,6 +515,12 @@ export type Database = {
           updated_at: string
           week_start: number
           year_level: number | null
+          timezone: string
+          brief_enabled: boolean
+          brief_time: string
+          brief_days: number
+          daily_study_goal_minutes: number
+          weekly_study_goal_minutes: number
         }
         Insert: {
           accent?: string
@@ -403,6 +535,12 @@ export type Database = {
           updated_at?: string
           week_start?: number
           year_level?: number | null
+          timezone?: string
+          brief_enabled?: boolean
+          brief_time?: string
+          brief_days?: number
+          daily_study_goal_minutes?: number
+          weekly_study_goal_minutes?: number
         }
         Update: {
           accent?: string
@@ -417,6 +555,12 @@ export type Database = {
           updated_at?: string
           week_start?: number
           year_level?: number | null
+          timezone?: string
+          brief_enabled?: boolean
+          brief_time?: string
+          brief_days?: number
+          daily_study_goal_minutes?: number
+          weekly_study_goal_minutes?: number
         }
         Relationships: []
       }
@@ -496,6 +640,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calendar_feed: { Args: { p_token: string }; Returns: Json }
       delete_my_account: { Args: never; Returns: undefined }
       valid_boundaries: { Args: { b: Json }; Returns: boolean }
       valid_criteria: { Args: { c: Json }; Returns: boolean }
@@ -507,7 +652,7 @@ export type Database = {
       event_kind: "deadline" | "exam" | "event" | "study"
       goal_metric: "subject_grade" | "total_points" | "custom"
       programme: "MYP" | "DP"
-      record_source: "manual" | "managebac" | "csv"
+      record_source: "manual" | "managebac" | "csv" | "google"
       subject_level: "SL" | "HL" | "MYP"
     }
     CompositeTypes: {

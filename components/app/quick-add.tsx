@@ -14,7 +14,8 @@ export function QuickAdd() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable], [role=dialog]")
-      if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
+      // Autofill and IME events can arrive without a key.
+      if (typeof e.key === "string" && e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
         e.preventDefault()
         openQuickAdd()
       }

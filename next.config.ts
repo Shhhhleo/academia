@@ -35,6 +35,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Hide the Next.js dev-tools badge; it is a development aid, not part of the product.
+  devIndicators: false,
   turbopack: {
     rules: {
       "*.css": {
