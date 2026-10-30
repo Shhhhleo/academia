@@ -10,6 +10,7 @@ import {
   assessmentInput,
   boundariesInput,
   componentsInput,
+  goalInput,
   subjectInput,
   toFieldErrors,
   type ActionResult,
@@ -266,6 +267,40 @@ export async function markNotificationsRead(): Promise<ActionResult> {
   const { supabase } = await requireUser()
   const { error } = await supabase.from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null)
   if (error) return dbError(error, "We couldn't update your notifications.")
+  refresh()
+  return { ok: true }
+}
+
+// ──────────────────────────────── Goals ────────────────────────────────
+
+export async function saveGoal(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const parsed = goalInput.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Check the highlighted fields.", fieldErrors: toFieldErrors(parsed.error) }
+  const { supabase } = await requireUser()
+  const v = parsed.data
+  if (v.metric === "subject_grade" && (!v.subjectId || v.targetValue > 7)) {
+    return { ok: false, error: "Pick a subject and a target grade from 1 to 7.", fieldErrors: { subjectId: "Pick a subject." } }
+  }
+  const row = {
+    subject_id: v.metric === "subject_grade" ? (v.subjectId ?? null) : null,
+    title: v.title,
+    metric: v.metric,
+    target_value: v.targetValue,
+    current_value: v.metric === "custom" ? (v.currentValue ?? null) : null,
+    deadline: v.deadline ?? null,
+  }
+  const { data, error } = v.id
+    ? await supabase.from("goals").update(row).eq("id", v.id).select("id").single()
+    : await supabase.from("goals").insert(row).select("id").single()
+  if (error || !data) return dbError(error, "We couldn't save that goal.")
+  refresh()
+  return { ok: true, id: data.id }
+}
+
+export async function deleteGoal(id: string): Promise<ActionResult> {
+  const { supabase } = await requireUser()
+  const { error } = await supabase.from("goals").delete().eq("id", id)
+  if (error) return dbError(error, "We couldn't delete that goal.")
   refresh()
   return { ok: true }
 }
