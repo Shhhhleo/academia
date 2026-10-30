@@ -2,6 +2,7 @@
 
 import { useTheme } from "next-themes"
 import { useEffect, useState, useTransition } from "react"
+import { useMounted } from "@/hooks/use-mounted"
 import { Check, Loader2, Monitor, Moon, Sun } from "lucide-react"
 import { toast } from "sonner"
 import { Panel } from "@/components/app/page-header"
@@ -35,8 +36,7 @@ function applyPrefs(accent: string, density: string) {
 
 export function SettingsForm({ profile }: { profile: Profile }) {
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useMounted()
 
   const [displayName, setDisplayName] = useState(profile.display_name)
   const [programme, setProgramme] = useState(profile.programme)

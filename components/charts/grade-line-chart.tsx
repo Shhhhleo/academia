@@ -1,7 +1,7 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useMounted } from "@/hooks/use-mounted"
 import { format, parseISO } from "date-fns"
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { seriesColor } from "@/lib/colors"
@@ -15,8 +15,7 @@ export interface GradePoint {
 
 function useIsDark() {
   const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useMounted()
   return mounted && resolvedTheme === "dark"
 }
 

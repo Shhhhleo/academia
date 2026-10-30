@@ -88,7 +88,7 @@ export function GlobalSearch({ autoFocus, onNavigate }: { autoFocus?: boolean; o
   const go = (r: Result) => {
     setOpen(false)
     setQuery("")
-    inputRef.current?.blur()
+    ;(document.activeElement as HTMLElement | null)?.blur()
     onNavigate?.()
     router.push(r.href)
   }

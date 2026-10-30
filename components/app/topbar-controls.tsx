@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
-import { useEffect, useState, useTransition } from "react"
+import { useTransition } from "react"
+import { useMounted } from "@/hooks/use-mounted"
 import { formatDistanceToNow } from "date-fns"
 import { Bell, CheckCheck, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react"
 import { toast } from "sonner"
@@ -124,8 +125,7 @@ export function NotificationsButton() {
 
 export function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useMounted()
   const Icon = !mounted ? Sun : resolvedTheme === "dark" ? Moon : Sun
 
   return (

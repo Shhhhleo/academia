@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useState, useSyncExternalStore, type ReactNode } from "react"
 import { Menu, Search, X } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
@@ -10,25 +10,36 @@ import { SidebarNav } from "./sidebar"
 import { NotificationsButton, ThemeToggle, UserMenu, YearSelect } from "./topbar-controls"
 
 const COLLAPSE_KEY = "academia:sidebar-collapsed"
+const COLLAPSE_EVENT = "academia:sidebar"
+
+function readCollapsed() {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+function subscribeCollapsed(cb: () => void) {
+  window.addEventListener(COLLAPSE_EVENT, cb)
+  window.addEventListener("storage", cb)
+  return () => {
+    window.removeEventListener(COLLAPSE_EVENT, cb)
+    window.removeEventListener("storage", cb)
+  }
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false)
   const [mobileNav, setMobileNav] = useState(false)
   const [mobileSearch, setMobileSearch] = useState(false)
 
-  useEffect(() => {
+  const toggle = () => {
     try {
-      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1")
+      localStorage.setItem(COLLAPSE_KEY, collapsed ? "0" : "1")
     } catch {}
-  }, [])
-
-  const toggle = () =>
-    setCollapsed((c) => {
-      try {
-        localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1")
-      } catch {}
-      return !c
-    })
+    window.dispatchEvent(new Event(COLLAPSE_EVENT))
+  }
 
   return (
     <div className="flex min-h-dvh">

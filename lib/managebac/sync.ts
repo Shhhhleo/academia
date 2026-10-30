@@ -64,7 +64,8 @@ export async function syncManageBac(supabase: ServerClient): Promise<SyncResult>
 
     const eventRows = items.map((it) => {
       const kind = inferKind(it.title)
-      eventUids.has(it.uid) ? updated++ : added++
+      if (eventUids.has(it.uid)) updated++
+      else added++
       return {
         title: it.title,
         description: it.description,

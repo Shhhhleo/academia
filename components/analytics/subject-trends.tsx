@@ -1,7 +1,8 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
+import { useMounted } from "@/hooks/use-mounted"
 import { format, parseISO } from "date-fns"
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { ChartFrame, DataTable } from "@/components/charts/chart-frame"
@@ -19,8 +20,7 @@ interface SeriesSubject {
 /** Multi-series grade history. Legend doubles as series toggles; colour follows the subject. */
 export function SubjectTrends({ subjects }: { subjects: SeriesSubject[] }) {
   const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useMounted()
   const dark = mounted && resolvedTheme === "dark"
 
   const withData = subjects.filter((s) => s.history.length > 0)

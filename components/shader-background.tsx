@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useMounted } from "@/hooks/use-mounted"
 import { cn } from "@/lib/utils"
 
 const PolishedShader = dynamic(() => import("@/components/ui/old-television-shader"), { ssr: false })
@@ -15,8 +15,7 @@ const PALETTES = {
 /** Theme-aware shader with a static gradient underneath (shown while WebGL loads or if it is unavailable). */
 export function ShaderBackground({ className }: { className?: string }) {
   const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useMounted()
   const palette = PALETTES[mounted && resolvedTheme === "dark" ? "dark" : "light"]
 
   return (

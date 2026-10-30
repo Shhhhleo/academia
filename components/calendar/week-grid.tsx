@@ -1,7 +1,7 @@
 "use client"
 
 import { addDays, format, startOfWeek } from "date-fns"
-import { useEffect, useState } from "react"
+import { useMinuteClock } from "@/hooks/use-mounted"
 import { cn } from "@/lib/utils"
 import { ItemChip } from "./item-chip"
 import type { CalItem } from "./items"
@@ -27,12 +27,8 @@ export function WeekGrid({
   onOpen: (item: CalItem) => void
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor, { weekStartsOn }), i))
-  const [now, setNow] = useState<Date | null>(null)
-  useEffect(() => {
-    setNow(new Date())
-    const t = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(t)
-  }, [])
+  const minute = useMinuteClock()
+  const now = minute == null ? null : new Date(minute * 60_000)
 
   const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
   const nowTop = now ? (now.getHours() + now.getMinutes() / 60 - START_HOUR) * HOUR_PX : -1

@@ -62,7 +62,7 @@ export function SignupForm() {
           {[
             { value: "MYP", label: "MYP", hint: "Criteria A–D" },
             { value: "DP", label: "DP", hint: "Components & %" },
-          ].map((o, i) => (
+          ].map((o) => (
             <label
               key={o.value}
               className="flex cursor-pointer items-center gap-3 rounded-lg border bg-field px-3 py-2.5 text-sm transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary-soft has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"

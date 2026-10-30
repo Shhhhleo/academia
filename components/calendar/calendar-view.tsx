@@ -96,7 +96,7 @@ export function CalendarView({
         <Button className="w-full" size="lg" onClick={() => setForm({ date: focused })}>
           <Plus aria-hidden="true" /> New event
         </Button>
-        <MiniMonth anchor={anchor} today={today} weekStartsOn={weekStartsOn} selected={date} onPick={(d) => go(d)} />
+        <MiniMonth key={date} anchor={anchor} today={today} weekStartsOn={weekStartsOn} selected={date} onPick={(d) => go(d)} />
 
         <fieldset className="space-y-1.5">
           <legend className="mb-2 text-xs font-medium text-muted-foreground">Show</legend>
@@ -236,7 +236,6 @@ export function CalendarView({
 
 function MiniMonth({ anchor, today, selected, weekStartsOn, onPick }: { anchor: Date; today: string; selected: string; weekStartsOn: 0 | 1; onPick: (d: string) => void }) {
   const [month, setMonth] = useState(anchor)
-  useEffect(() => setMonth(anchor), [anchor.getTime()]) // eslint-disable-line react-hooks/exhaustive-deps
   const days = monthGridDays(month, weekStartsOn)
   return (
     <div className="rounded-[var(--radius-card)] border bg-card p-3 shadow-card">
