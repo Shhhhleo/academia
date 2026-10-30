@@ -14,7 +14,13 @@ export function GradeNumber({
   const sizes = { sm: "text-xl", md: "text-3xl", lg: "text-5xl", xl: "text-7xl" }
   return (
     <span className={cn("inline-flex items-baseline gap-0.5 font-mono font-semibold tabular tracking-tight", className)}>
-      <span className={sizes[size]}>{grade ?? "–"}</span>
+      {grade != null ? (
+        <span className={sizes[size]}>{grade}</span>
+      ) : (
+        <span className={cn(sizes[size], "font-sans font-normal text-muted-foreground/60")} aria-label="No grade yet">
+          –
+        </span>
+      )}
       <span className="text-sm font-medium text-muted-foreground">/7</span>
     </span>
   )
