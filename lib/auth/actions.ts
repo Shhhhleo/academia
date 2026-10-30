@@ -44,6 +44,9 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   })
   if (error) {
     if (error.code === "weak_password") return { status: "error", fieldErrors: { password: error.message }, values }
+    if (error.code === "email_address_not_authorized" || error.code === "email_address_invalid") {
+      return { status: "error", message: "We couldn’t send a confirmation email to that address. Check it’s correct, or try again later.", values }
+    }
     if (error.code === "over_email_send_rate_limit") {
       return { status: "error", message: "Too many sign-up emails were sent recently. Try again in a few minutes.", values }
     }

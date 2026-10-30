@@ -24,6 +24,8 @@ export const metadata: Metadata = {
   authors: [{ name: site.name }],
   creator: site.name,
   formatDetection: { telephone: false, email: false, address: false },
+  // Google Search Console HTML-tag verification (set GOOGLE_SITE_VERIFICATION in the deployment).
+  verification: process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : undefined,
 }
 
 export const viewport: Viewport = {
