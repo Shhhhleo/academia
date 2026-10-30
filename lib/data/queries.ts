@@ -52,6 +52,28 @@ export const getNotifications = cache(async () => {
   return data ?? []
 })
 
+export const getGoals = cache(async () => {
+  const { supabase } = await requireUser()
+  const { data } = await supabase.from("goals").select("*").order("created_at")
+  return data ?? []
+})
+
+/** Calendar events overlapping [from, to] (yyyy-mm-dd), both all-day and timed. */
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+export const getEvents = cache(async (from: string, to: string) => {
+  // Interpolated into a PostgREST filter below, so only strict yyyy-mm-dd values are allowed.
+  if (!ISO_DAY.test(from) || !ISO_DAY.test(to)) throw new Error("Invalid date range")
+  const { supabase } = await requireUser()
+  const { data } = await supabase
+    .from("events")
+    .select("*")
+    .or(`and(all_day.eq.true,starts_on.gte.${from},starts_on.lte.${to}),and(all_day.eq.false,starts_at.gte.${from}T00:00:00Z,starts_at.lte.${to}T23:59:59Z)`)
+    .order("starts_on", { ascending: true, nullsFirst: false })
+    .limit(1000)
+  return data ?? []
+})
+
 export async function getSubject(id: string) {
   const ws = await getWorkspace()
   return ws.subjects.find((s) => s.id === id) ?? null

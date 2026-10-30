@@ -26,7 +26,7 @@ export function resultText(a: Assessment, programme: "MYP" | "DP") {
   if (a.status === "upcoming") return null
   if (programme === "MYP") {
     const c = (a.criteria ?? {}) as Partial<Record<Criterion, number | null>>
-    return CRITERIA.map((k) => `${k}${c[k] ?? "–"}`).join(" ")
+    return CRITERIA.filter((k) => c[k] != null).map((k) => `${k}${c[k]}`).join(" ") || "–"
   }
   if (a.raw_score == null || a.max_score == null) return null
   return `${a.raw_score}/${a.max_score}`
