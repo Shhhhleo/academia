@@ -11,6 +11,9 @@ export type CalendarEvent = Tables<"events">
 export type Notification = Tables<"notifications">
 export type Integration = Tables<"integrations">
 export type ImportRun = Tables<"import_runs">
+export type StudySession = Tables<"study_sessions">
+export type Todo = Tables<"todos">
+export type Reminder = Tables<"reminders">
 
 export interface SubjectWithGrade extends Subject {
   components: Component[]

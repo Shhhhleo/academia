@@ -78,3 +78,30 @@ export async function getSubject(id: string) {
   const ws = await getWorkspace()
   return ws.subjects.find((s) => s.id === id) ?? null
 }
+
+/** Study sessions from the last ~13 months (enough for streaks and weekly views). */
+export const getStudySessions = cache(async () => {
+  const { supabase } = await requireUser()
+  const since = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10)
+  const { data } = await supabase
+    .from("study_sessions")
+    .select("*")
+    .gte("studied_on", since)
+    .order("studied_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(3000)
+  return data ?? []
+})
+
+export const getTodos = cache(async () => {
+  const { supabase } = await requireUser()
+  const { data } = await supabase.from("todos").select("*").order("done_at", { ascending: true, nullsFirst: true }).order("due_on", { ascending: true, nullsFirst: false }).limit(1000)
+  return data ?? []
+})
+
+export const getReminders = cache(async () => {
+  const { supabase } = await requireUser()
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
+  const { data } = await supabase.from("reminders").select("*").gte("remind_at", since).order("remind_at").limit(500)
+  return data ?? []
+})

@@ -1,13 +1,18 @@
 import {
+  BellRing,
   BookOpen,
+  CalendarSync,
   Calculator,
   CalendarDays,
   ChartLine,
   ClipboardList,
   LayoutDashboard,
+  ListTodo,
   Link2,
   Settings,
+  Sunrise,
   Target,
+  Timer,
   type LucideIcon,
 } from "lucide-react"
 
@@ -29,6 +34,15 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
+    label: "Plan",
+    items: [
+      { href: "/brief", label: "Daily Brief", icon: Sunrise, keywords: "today summary morning plan" },
+      { href: "/study", label: "Study Log", icon: Timer, keywords: "stopwatch timer streak hours revision" },
+      { href: "/todos", label: "To-do", icon: ListTodo, keywords: "tasks checklist list" },
+      { href: "/reminders", label: "Reminders", icon: BellRing, keywords: "alerts notify remember" },
+    ],
+  },
+  {
     label: "Insights",
     items: [
       { href: "/calculator", label: "Grade Calculator", icon: Calculator, keywords: "what if predict required" },
@@ -38,7 +52,10 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "Connect",
-    items: [{ href: "/integrations/managebac", label: "ManageBac Integration", icon: Link2, keywords: "sync import ical" }],
+    items: [
+      { href: "/integrations/managebac", label: "ManageBac Integration", icon: Link2, keywords: "sync import ical" },
+      { href: "/integrations/google-calendar", label: "Google Calendar", icon: CalendarSync, keywords: "google sync subscribe ical" },
+    ],
   },
 ]
 

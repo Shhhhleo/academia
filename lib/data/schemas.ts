@@ -153,3 +153,54 @@ export function toFieldErrors(error: z.ZodError): Record<string, string> {
   }
   return out
 }
+
+// ─────────────────────────── Study, to-dos, reminders ───────────────────────────
+
+const validTimeZone = (tz: string) => {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const studySessionInput = z.object({
+  subjectId: uuid.nullish(),
+  studiedOn: isoDate,
+  minutes: z.number().int("Use whole minutes.").min(1, "Log at least 1 minute.").max(1440, "That’s more than a day."),
+  startedAt: z.iso.datetime({ offset: true }).nullish(),
+  note: optionalText(500),
+})
+export type StudySessionInput = z.input<typeof studySessionInput>
+
+export const studyGoalInput = z.object({
+  daily: z.number().int().min(5).max(720),
+  weekly: z.number().int().min(0).max(5040),
+})
+
+export const todoInput = z.object({
+  id: uuid.optional(),
+  title: z.string().trim().min(1, "Write the task.").max(200),
+  notes: optionalText(2000),
+  dueOn: isoDate.nullish(),
+  subjectId: uuid.nullish(),
+  priority: z.number().int().min(0).max(2).default(1),
+})
+export type TodoInput = z.input<typeof todoInput>
+
+export const reminderInput = z.object({
+  id: uuid.optional(),
+  title: z.string().trim().min(1, "What should we remind you about?").max(200),
+  notes: optionalText(1000),
+  remindAt: z.iso.datetime({ offset: true, message: "Pick a date and time." }),
+  subjectId: uuid.nullish(),
+})
+export type ReminderInput = z.input<typeof reminderInput>
+
+export const briefInput = z.object({
+  enabled: z.boolean(),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a time like 07:30."),
+  days: z.number().int().min(1).max(14),
+  timezone: z.string().min(1).max(64).refine(validTimeZone, "Unknown time zone."),
+})

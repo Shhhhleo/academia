@@ -1,5 +1,5 @@
 import "server-only"
-import { normalizeFeedUrl } from "./feed-url"
+import { normalizeFeedUrl, type FeedUrlResult } from "./feed-url"
 
 const MAX_BYTES = 2 * 1024 * 1024
 const MAX_REDIRECTS = 3
@@ -12,12 +12,12 @@ export class FeedError extends Error {}
  * against the ManageBac host allow-list, the response is capped at 2 MB, and the
  * whole request times out after 10 s.
  */
-export async function fetchFeed(initialUrl: string): Promise<string> {
+export async function fetchFeed(initialUrl: string, validate: (url: string) => FeedUrlResult = normalizeFeedUrl, source = "ManageBac"): Promise<string> {
   let url = initialUrl
   const signal = AbortSignal.timeout(TIMEOUT_MS)
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const checked = normalizeFeedUrl(url)
+    const checked = validate(url)
     if (!checked.ok) throw new FeedError(checked.error)
 
     let res: Response
@@ -30,24 +30,24 @@ export async function fetchFeed(initialUrl: string): Promise<string> {
       })
     } catch (e) {
       throw new FeedError(
-        e instanceof Error && e.name === "TimeoutError" ? "ManageBac took too long to respond. Try again shortly." : "We couldn’t reach ManageBac.",
+        e instanceof Error && e.name === "TimeoutError" ? `${source} took too long to respond. Try again shortly.` : `We couldn’t reach ${source}.`,
       )
     }
 
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location")
-      if (!location) throw new FeedError("ManageBac sent an invalid redirect.")
+      if (!location) throw new FeedError(`${source} sent an invalid redirect.`)
       url = new URL(location, checked.url).toString()
       continue
     }
     if (res.status === 401 || res.status === 403 || res.status === 404) {
-      throw new FeedError("ManageBac rejected the link. It may have been reset. Copy a fresh one from ManageBac.")
+      throw new FeedError(`${source} rejected the link. It may have been reset. Copy a fresh one from ${source}.`)
     }
-    if (!res.ok) throw new FeedError(`ManageBac responded with an error (${res.status}).`)
+    if (!res.ok) throw new FeedError(`${source} responded with an error (${res.status}).`)
 
     const declared = Number(res.headers.get("content-length") ?? 0)
     if (declared > MAX_BYTES) throw new FeedError("That calendar is too large to import.")
-    if (!res.body) throw new FeedError("ManageBac returned an empty calendar.")
+    if (!res.body) throw new FeedError(`${source} returned an empty calendar.`)
 
     const reader = res.body.getReader()
     const chunks: Uint8Array[] = []
@@ -66,5 +66,5 @@ export async function fetchFeed(initialUrl: string): Promise<string> {
     if (!text.includes("BEGIN:VCALENDAR")) throw new FeedError("That link didn’t return a calendar. Check you copied the subscribe link.")
     return text
   }
-  throw new FeedError("Too many redirects from ManageBac.")
+  throw new FeedError(`Too many redirects from ${source}.`)
 }

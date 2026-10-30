@@ -25,7 +25,7 @@ export function ItemChip({ item, onOpen, compact }: { item: CalItem; onOpen: (i:
       <span className="h-3 w-0.5 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
       {!item.allDay && item.start && <span className="shrink-0 font-mono tabular text-muted-foreground">{format(item.start, "HH:mm")}</span>}
       <span className={cn("truncate font-medium text-foreground", item.status === "graded" && "line-through decoration-muted-foreground/50")}>{item.title}</span>
-      {item.source === "managebac" && <Link2 className="ml-auto size-3 shrink-0 text-muted-foreground" aria-label="From ManageBac" />}
+      {(item.source === "managebac" || item.source === "google") && <Link2 className="ml-auto size-3 shrink-0 text-muted-foreground" aria-label={item.source === "google" ? "From Google Calendar" : "From ManageBac"} />}
       {item.status === "graded" && <CircleCheck className="ml-auto size-3 shrink-0 text-muted-foreground" aria-label="Graded" />}
     </button>
   )

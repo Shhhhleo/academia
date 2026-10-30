@@ -50,7 +50,7 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       // The signed-in app and its APIs are never indexed and never cached by shared caches.
       {
-        source: "/(dashboard|subjects|assessments|calendar|calculator|goals|analytics|integrations|settings|api)/:path*",
+        source: "/(dashboard|subjects|assessments|calendar|calculator|goals|analytics|integrations|settings|study|todos|reminders|brief|api)/:path*",
         headers: [
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
           { key: "Cache-Control", value: "private, no-store" },

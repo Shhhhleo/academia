@@ -9,6 +9,10 @@ export const APP_ROUTES = [
   "/analytics",
   "/integrations",
   "/settings",
+  "/study",
+  "/todos",
+  "/reminders",
+  "/brief",
 ] as const
 
 export const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"] as const

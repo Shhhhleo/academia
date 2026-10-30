@@ -104,6 +104,7 @@ export function CalendarView({
             [
               ["assessment", "Assessments"],
               ["managebac", "ManageBac"],
+              ["google", "Google Calendar"],
               ["manual", "My events"],
             ] as const
           ).map(([k, label]) => (

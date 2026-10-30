@@ -1,7 +1,7 @@
 import { format } from "date-fns"
 import type { Assessment, CalendarEvent } from "@/lib/data/types"
 
-export type ItemSource = "assessment" | "managebac" | "manual"
+export type ItemSource = "assessment" | "managebac" | "google" | "manual"
 
 export interface CalItem {
   key: string
@@ -66,7 +66,7 @@ export function buildItems(subjects: SubjectLike[], events: CalendarEvent[]): Ca
       color: s?.color ?? null,
       subjectId: e.subject_id,
       subjectName: s?.name ?? null,
-      source: e.source === "managebac" ? "managebac" : "manual",
+      source: e.source === "managebac" ? "managebac" : e.source === "google" ? "google" : "manual",
       kind: e.kind,
       description: e.description,
       event: e,

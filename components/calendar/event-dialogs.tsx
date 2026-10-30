@@ -51,9 +51,9 @@ export function ItemDetailsDialog({ item, onClose, onEdit }: { item: CalItem | n
           )}
           <dt className="text-muted-foreground">Source</dt>
           <dd className="inline-flex items-center gap-1">
-            {item.source === "managebac" ? (
+            {item.source === "managebac" || item.source === "google" ? (
               <>
-                <Link2 className="size-3.5" aria-hidden="true" /> ManageBac (read-only)
+                <Link2 className="size-3.5" aria-hidden="true" /> {item.source === "google" ? "Google Calendar" : "ManageBac"} (read-only)
               </>
             ) : item.source === "assessment" ? (
               "Assessment"
