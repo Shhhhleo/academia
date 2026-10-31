@@ -1,5 +1,6 @@
 import "server-only"
 import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 import { cache } from "react"
 import { requireUser } from "@/lib/auth/session"
 import { overviewOf, withGrade } from "./to-engine"
@@ -18,6 +19,8 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
     supabase.from("profiles").select("*").eq("id", user.id).single(),
     supabase.from("academic_years").select("*").order("starts_on", { ascending: false }),
   ])
+  // No profile row means the account was deleted while this browser still held its session.
+  if (profileRes.error?.code === "PGRST116") redirect("/auth/signout")
   if (profileRes.error || !profileRes.data) throw new Error("Your profile could not be loaded.")
   const years = yearsRes.data ?? []
   const year = years.find((y) => y.id === yearCookie) ?? years.find((y) => y.is_current) ?? years[0]
