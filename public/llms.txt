@@ -1,0 +1,21 @@
+# Academia
+
+> Academia is a free, private grade tracker for International Baccalaureate (IB) students in the Middle Years Programme (MYP) and the Diploma Programme (DP). Students log each summative, exam or task as it is graded; Academia keeps a live estimated 1–7 grade for every subject, shows trends, tracks target grades and goals, and imports deadlines from a ManageBac calendar link.
+
+Key facts:
+
+- MYP grades: each criterion (A, B, C, D) is marked 0–8. Academia combines each criterion across tasks (average by default; latest, highest or median optional), sums the four (out of 32) and converts with the IB boundaries: 1–5 → 1, 6–9 → 2, 10–14 → 3, 15–18 → 4, 19–23 → 5, 24–27 → 6, 28–32 → 7. If only some criteria are assessed, the total is projected from the criteria present and labelled partial.
+- DP grades: scores become percentages, weighted by subject components (for example Paper 1 40%, Paper 2 40%, Internal Assessment 20%), then converted to 1–7 using grade boundaries the student can edit per subject. Defaults: 7 ≥ 80%, 6 ≥ 70%, 5 ≥ 60%, 4 ≥ 50%, 3 ≥ 40%, 2 ≥ 30%.
+- Every grade Academia calculates is labelled "Estimated" and shown separately from the grade the school reports, which is the official one.
+- "What do I need?": Academia solves for the minimum percentage (DP) or criterion level (MYP) needed on the next task to reach a target grade.
+- ManageBac: students paste their ManageBac calendar subscription (iCal) link. Sync is read-only and one-way; the link is encrypted at rest; Academia never asks for a ManageBac password.
+- Privacy: each account's data is isolated by database row-level security. Students can export all data (JSON/CSV) or delete their account.
+- Academia is not affiliated with the International Baccalaureate Organization or Faria Education Group (ManageBac).
+
+## Pages
+
+- [Home](https://academia-ib.vercel.app/): product overview, interactive MYP/DP grade demo, FAQ
+- [How IB grades are calculated](https://academia-ib.vercel.app/guides/ib-grading): MYP criteria boundaries, DP weighted components and boundaries, worked examples
+- [Create a free account](https://academia-ib.vercel.app/signup)
+- [Privacy policy](https://academia-ib.vercel.app/privacy)
+- [Terms of use](https://academia-ib.vercel.app/terms)

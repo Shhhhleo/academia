@@ -1,0 +1,11 @@
+# Keep secrets and non-app folders out of Vercel uploads.
+.env*
+!.env.example
+/.superpowers
+/.claude
+/video
+/docs
+/supabase
+/scripts
+/seo
+*.tsbuildinfo

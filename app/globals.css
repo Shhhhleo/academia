@@ -1,0 +1,241 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-jakarta), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-heading: var(--font-jakarta), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-field: var(--field);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-lavender: var(--lavender);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-surface: var(--background);
+  --color-surface-2: var(--surface-2);
+
+  /* Performance semantics: the base hue is for fills/icons, *-text meets 4.5:1 on cards */
+  --color-success: var(--success);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-text: var(--warning-text);
+  --color-decline: var(--decline);
+  --color-decline-text: var(--decline-text);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Used by the supplied search Input component */
+  --radius-ele: 8px;
+  --radius-card: 12px;
+}
+
+:root {
+  color-scheme: light;
+  --radius: 0.5rem;
+  --background: #fafaf8;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --primary-soft: #eef0ff;
+  --lavender: #a5b4fc;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #171717;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b6b6b;
+  --accent: #f3f4f6;
+  --accent-foreground: #171717;
+  --destructive: #dc3d3a;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --field: #ffffff;
+  --ring: #4f46e5;
+  --surface-2: #f3f4f6;
+
+  --success: #10b981;
+  --success-text: #047857;
+  --warning: #f59e0b;
+  --warning-text: #b45309;
+  --decline: #ef6461;
+  --decline-text: #c2413e;
+
+  --chart-1: var(--primary);
+  --chart-2: #a5b4fc;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #ef6461;
+
+  --sidebar: #f6f6f3;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ececea;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: var(--primary);
+
+  --card-pad: 1.5rem;
+  --row-pad: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(23 23 23 / 0.04), 0 1px 3px rgb(23 23 23 / 0.04);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #101114;
+  --foreground: #f5f5f5;
+  --card: #222329;
+  --card-foreground: #f5f5f5;
+  --popover: #222329;
+  --popover-foreground: #f5f5f5;
+  --primary: #818cf8;
+  --primary-foreground: #101114;
+  --primary-soft: #23244a;
+  --lavender: #a5b4fc;
+  --secondary: #1a1b1f;
+  --secondary-foreground: #f5f5f5;
+  --muted: #1a1b1f;
+  --muted-foreground: #a1a1aa;
+  --accent: #2a2b31;
+  --accent-foreground: #f5f5f5;
+  --destructive: #f2807d;
+  --border: #303137;
+  --input: #303137;
+  --field: rgb(255 255 255 / 0.03);
+  --ring: #818cf8;
+  --surface-2: #1a1b1f;
+
+  --success: #10b981;
+  --success-text: #34d399;
+  --warning: #f59e0b;
+  --warning-text: #fbbf24;
+  --decline: #ef6461;
+  --decline-text: #f58b88;
+
+  --chart-2: #6366f1;
+
+  --sidebar: #15161a;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-accent: #222329;
+  --sidebar-accent-foreground: #f5f5f5;
+  --sidebar-border: #26272d;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+}
+
+/* User-selectable accent colours (Settings → Appearance) */
+html[data-accent="emerald"] { --primary: #047857; --primary-soft: #e7f6ef; }
+html.dark[data-accent="emerald"] { --primary: #34d399; --primary-soft: #11302a; }
+html[data-accent="amber"] { --primary: #b45309; --primary-soft: #fdf3e2; }
+html.dark[data-accent="amber"] { --primary: #fbbf24; --primary-soft: #33280f; }
+html[data-accent="rose"] { --primary: #e11d48; --primary-soft: #fdecef; }
+html.dark[data-accent="rose"] { --primary: #fb7185; --primary-soft: #3a1820; }
+html[data-accent="sky"] { --primary: #0369a1; --primary-soft: #e6f3fb; }
+html.dark[data-accent="sky"] { --primary: #38bdf8; --primary-soft: #0f2a3a; }
+html[data-accent="slate"] { --primary: #334155; --primary-soft: #eef0f3; }
+html.dark[data-accent="slate"] { --primary: #cbd5e1; --primary-soft: #262a31; }
+html[data-accent] { --ring: var(--primary); --chart-1: var(--primary); --sidebar-primary: var(--primary); --sidebar-ring: var(--primary); }
+
+/* Density (Settings → Appearance) */
+html[data-density="compact"] { --card-pad: 1rem; --row-pad: 0.375rem; }
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
+  h1, h2, h3 {
+    @apply font-display tracking-tight;
+    text-wrap: balance;
+  }
+  /* Native dropdown lists follow the theme (Windows renders them from these values). */
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 22%, transparent);
+  }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  .card-pad { padding: var(--card-pad); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Long-form public pages */
+@layer components {
+  .prose-academia { line-height: 1.75; font-size: 1.0625rem; }
+  .prose-academia > * + * { margin-top: 1.1em; }
+  .prose-academia h2 { margin-top: 2.4em; font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+  .prose-academia h3 { margin-top: 1.8em; font-size: 1.2rem; font-weight: 700; }
+  .prose-academia p, .prose-academia li { color: color-mix(in oklab, var(--foreground) 82%, transparent); }
+  .prose-academia ul { list-style: disc; padding-left: 1.3em; }
+  .prose-academia ol { list-style: decimal; padding-left: 1.3em; }
+  .prose-academia li + li { margin-top: 0.4em; }
+  .prose-academia a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+  .prose-academia strong { color: var(--foreground); font-weight: 600; }
+  .prose-academia table { width: 100%; font-size: 0.95rem; border-collapse: collapse; }
+  .prose-academia th { text-align: left; font-weight: 600; font-size: 0.8rem; color: var(--muted-foreground); padding: 0.5rem 0.75rem 0.5rem 0; border-bottom: 1px solid var(--border); }
+  .prose-academia td { padding: 0.55rem 0.75rem 0.55rem 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  .prose-academia .callout { border: 1px solid var(--border); background: var(--card); border-radius: var(--radius-card); padding: 1rem 1.25rem; }
+}

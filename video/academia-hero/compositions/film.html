@@ -1,0 +1,397 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Plus Jakarta Sans";
+      src: url("assets/fonts/plus-jakarta-sans-latin-700-normal.woff2") format("woff2");
+      font-weight: 700;
+    }
+    @font-face {
+      font-family: "Plus Jakarta Sans";
+      src: url("assets/fonts/plus-jakarta-sans-latin-800-normal.woff2") format("woff2");
+      font-weight: 800;
+    }
+    #root {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: #0b0c10;
+      font-family: "Inter", sans-serif;
+      color: #f5f5f5;
+      --card: #222329;
+      --border: #303137;
+      --muted: #a1a1aa;
+    }
+    /* Background plane: glow + dot grid, moves slowest */
+    #film-bg {
+      position: absolute;
+      inset: -120px;
+    }
+    #film-glow {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(42% 46% at 50% 44%, rgba(79, 70, 229, 0.28), rgba(79, 70, 229, 0) 70%),
+        radial-gradient(30% 30% at 78% 82%, rgba(165, 180, 252, 0.1), rgba(165, 180, 252, 0) 70%);
+    }
+    #film-dots {
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1.2px);
+      background-size: 34px 34px;
+      mask-image: radial-gradient(60% 60% at 50% 45%, #000 30%, transparent 80%);
+    }
+    /* Camera: the subject plane */
+    #film-cam {
+      position: absolute;
+      inset: 0;
+      transform-origin: 960px 540px;
+    }
+    .card {
+      position: absolute;
+      width: 420px;
+      height: 236px;
+      padding: 22px 24px 18px;
+      border-radius: 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .card .bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 3px;
+    }
+    .card .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .card .name {
+      font-family: "Plus Jakarta Sans", sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    .card .sub {
+      margin-top: 3px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .card .badge {
+      font-size: 12px;
+      font-weight: 500;
+      color: #a5b4fc;
+      background: #23244a;
+      border: 1px dashed #a5b4fc;
+      border-radius: 999px;
+      padding: 3px 9px;
+      white-space: nowrap;
+    }
+    .card .mid {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+    .card .grade {
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 600;
+      font-size: 56px;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    .card .grade small {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
+    .card .trend {
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .card .trend.up {
+      color: #34d399;
+    }
+    .card .foot {
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .card .foot b {
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 500;
+      color: #f5f5f5;
+    }
+    .card .foot .tgt {
+      color: #fbbf24;
+      font-weight: 500;
+    }
+    .spark path {
+      fill: none;
+      stroke-width: 2.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    /* Foreground plane: chips, move fastest */
+    #film-fg {
+      position: absolute;
+      inset: 0;
+    }
+    .chip {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: rgba(34, 35, 41, 0.92);
+      border: 1px solid #3a3b42;
+      box-shadow: 0 20px 40px -18px rgba(0, 0, 0, 0.8);
+      font-size: 18px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .chip i {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: block;
+    }
+    .chip b {
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 600;
+    }
+    /* The product, captured from the real app */
+    #film-frame {
+      position: absolute;
+      left: 360px;
+      top: 60px;
+      width: 1200px;
+      height: 786px;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #101114;
+      border: 1px solid #34353c;
+      box-shadow:
+        0 60px 120px -40px rgba(0, 0, 0, 0.85),
+        0 0 0 1px rgba(255, 255, 255, 0.02);
+    }
+    #film-chrome {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      background: #17181d;
+      border-bottom: 1px solid #2a2b31;
+    }
+    #film-chrome span {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #3a3b42;
+    }
+    #film-url {
+      margin-left: 18px;
+      height: 22px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: #0f1014;
+      color: #8b8b94;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+    }
+    #film-shot {
+      display: block;
+      width: 1200px;
+      height: 750px;
+    }
+  </style>
+
+  <div data-hf-id="hf-3hct" id="root" data-composition-id="film" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-fasu" id="film-bg" data-layout-ignore>
+      <div data-hf-id="hf-ggpr" id="film-glow"></div>
+      <div data-hf-id="hf-0qrc" id="film-dots"></div>
+    </div>
+
+    <div data-hf-id="hf-9xae" id="film-frame" data-layout-allow-overflow>
+      <div data-hf-id="hf-oky2" id="film-chrome">
+        <span data-hf-id="hf-uckh"></span><span data-hf-id="hf-l73p"></span><span data-hf-id="hf-me0s"></span>
+        <div data-hf-id="hf-xjv1" id="film-url">academia-ib.vercel.app/dashboard</div>
+      </div>
+      <img data-hf-id="hf-el31" id="film-shot" src="assets/dashboard-dark.png" alt="" />
+    </div>
+
+    <div data-hf-id="hf-e7ai" id="film-cam" data-layout-allow-overflow data-layout-allow-overlap>
+      <!-- Row 1 -->
+      <div data-hf-id="hf-3exj" class="card" id="c-fr" style="left: 302px; top: 290px">
+        <div data-hf-id="hf-gz81" class="bar" style="background: #d95926"></div>
+        <div data-hf-id="hf-z992" class="head">
+          <div data-hf-id="hf-yeow"><div data-hf-id="hf-cm2x" class="name">French</div><div data-hf-id="hf-vd6u" class="sub">MYP · Language acquisition</div></div>
+          <div data-hf-id="hf-m571" class="badge">Estimated</div>
+        </div>
+        <div data-hf-id="hf-wgyu" class="mid">
+          <div data-hf-id="hf-y7yw"><div data-hf-id="hf-k5mc" class="grade" id="g-fr">–<small data-hf-id="hf-ypiq">/7</small></div><div data-hf-id="hf-ncm4" class="trend">→ No change</div></div>
+          <svg data-hf-id="hf-udvx" class="spark" width="110" height="40"><path data-hf-id="hf-wxxs" id="s-fr" d="M4 20 L56 20 L106 20" stroke="#d95926" /></svg>
+        </div>
+        <div data-hf-id="hf-mlgk" class="foot"><span data-hf-id="hf-rklc"><b data-hf-id="hf-sc0y">3</b> assessments</span><span data-hf-id="hf-t01d" class="tgt">◎ Target 6 (−1)</span></div>
+      </div>
+
+      <div data-hf-id="hf-49ky" class="card" id="c-ll" style="left: 750px; top: 290px">
+        <div data-hf-id="hf-cpqz" class="bar" style="background: #3987e5"></div>
+        <div data-hf-id="hf-gwvu" class="head">
+          <div data-hf-id="hf-x11t"><div data-hf-id="hf-2kit" class="name">Language and Literature</div><div data-hf-id="hf-f967" class="sub">MYP · Language and literature</div></div>
+          <div data-hf-id="hf-rc7e" class="badge" id="b-ll">Estimated</div>
+        </div>
+        <div data-hf-id="hf-dkru" class="mid">
+          <div data-hf-id="hf-xfcu"><div data-hf-id="hf-1ts0" class="grade" id="g-ll">–<small data-hf-id="hf-nuk6">/7</small></div><div data-hf-id="hf-2yr9" class="trend up" id="t-ll">↗ Up 1 since last task</div></div>
+          <svg data-hf-id="hf-1loh" class="spark" width="110" height="40"><path data-hf-id="hf-qoo6" id="s-ll" d="M4 26 L106 10" stroke="#3987e5" /></svg>
+        </div>
+        <div data-hf-id="hf-3ly4" class="foot"><span data-hf-id="hf-ngu0"><b data-hf-id="hf-nwee">3</b> assessments</span><span data-hf-id="hf-y0kf" class="tgt" id="f-ll">◎ Target 7 (−1)</span></div>
+      </div>
+
+      <div data-hf-id="hf-4tjd" class="card" id="c-is" style="left: 1198px; top: 290px">
+        <div data-hf-id="hf-fgdz" class="bar" style="background: #199e70"></div>
+        <div data-hf-id="hf-hb6v" class="head">
+          <div data-hf-id="hf-w8fr"><div data-hf-id="hf-9axo" class="name">Individuals and Societies</div><div data-hf-id="hf-el8e" class="sub">MYP · Individuals and societies</div></div>
+        </div>
+        <div data-hf-id="hf-dz2v" class="mid">
+          <div data-hf-id="hf-wmqs"><div data-hf-id="hf-3u8w" class="grade" id="g-is">–<small data-hf-id="hf-o8v7">/7</small></div><div data-hf-id="hf-9t5m" class="trend up">↗ Up 1 since last task</div></div>
+          <svg data-hf-id="hf-2slk" class="spark" width="110" height="40"><path data-hf-id="hf-sueq" id="s-is" d="M4 26 L106 14" stroke="#199e70" /></svg>
+        </div>
+        <div data-hf-id="hf-2f11" class="foot"><span data-hf-id="hf-m9wx"><b data-hf-id="hf-oapf">3</b> assessments</span><span data-hf-id="hf-t10l" class="tgt">◎ Target 6 (−1)</span></div>
+      </div>
+
+      <!-- Row 2 -->
+      <div data-hf-id="hf-choi" class="card" id="c-sc" style="left: 302px; top: 554px">
+        <div data-hf-id="hf-nu2v" class="bar" style="background: #c98500"></div>
+        <div data-hf-id="hf-hphw" class="head">
+          <div data-hf-id="hf-vftp"><div data-hf-id="hf-9em6" class="name">Sciences</div><div data-hf-id="hf-uov4" class="sub">MYP · Sciences</div></div>
+          <div data-hf-id="hf-3fup" class="badge">Estimated</div>
+        </div>
+        <div data-hf-id="hf-eddw" class="mid">
+          <div data-hf-id="hf-vu4q"><div data-hf-id="hf-1raq" class="grade" id="g-sc">–<small data-hf-id="hf-on68">/7</small></div><div data-hf-id="hf-2k5w" class="trend">→ No change</div></div>
+          <svg data-hf-id="hf-2eaj" class="spark" width="110" height="40"><path data-hf-id="hf-e6it" id="s-sc" d="M4 14 L106 14" stroke="#c98500" /></svg>
+        </div>
+        <div data-hf-id="hf-2tc2" class="foot"><span data-hf-id="hf-mo7y"><b data-hf-id="hf-op0g">3</b> assessments</span><span data-hf-id="hf-nods" class="tgt">◎ Target 7 (−1)</span></div>
+      </div>
+
+      <div data-hf-id="hf-tp93" class="card" id="c-ma" style="left: 750px; top: 554px">
+        <div data-hf-id="hf-crko" class="bar" style="background: #d55181"></div>
+        <div data-hf-id="hf-i3sx" class="head">
+          <div data-hf-id="hf-1043"><div data-hf-id="hf-xccp" class="name">Mathematics</div><div data-hf-id="hf-qihf" class="sub">MYP · Mathematics</div></div>
+          <div data-hf-id="hf-4mrs" class="badge">Estimated</div>
+        </div>
+        <div data-hf-id="hf-erox" class="mid">
+          <div data-hf-id="hf-1ef4"><div data-hf-id="hf-y8yi" class="grade" id="g-ma">–<small data-hf-id="hf-lv11">/7</small></div><div data-hf-id="hf-ak1q" class="trend up">↗ Up 1 since last task</div></div>
+          <svg data-hf-id="hf-0ere" class="spark" width="110" height="40"><path data-hf-id="hf-8a5t" id="s-ma" d="M4 30 L56 26 L106 18" stroke="#d55181" /></svg>
+        </div>
+        <div data-hf-id="hf-4sv7" class="foot"><span data-hf-id="hf-lhav"><b data-hf-id="hf-ubk3">4</b> assessments</span><span data-hf-id="hf-qxor" class="tgt">◎ Target 7 (−2)</span></div>
+      </div>
+
+      <div data-hf-id="hf-un91" class="card" id="c-de" style="left: 1198px; top: 554px">
+        <div data-hf-id="hf-wvf3" class="bar" style="background: #e66767"></div>
+        <div data-hf-id="hf-ii3y" class="head">
+          <div data-hf-id="hf-c4s8"><div data-hf-id="hf-wzp7" class="name">Design</div><div data-hf-id="hf-gp7p" class="sub">MYP · Design</div></div>
+          <div data-hf-id="hf-2tnd" class="badge">Estimated · partial</div>
+        </div>
+        <div data-hf-id="hf-f5zy" class="mid">
+          <div data-hf-id="hf-bqh7"><div data-hf-id="hf-54b7" class="grade" id="g-de">–<small data-hf-id="hf-m9c2">/7</small></div><div data-hf-id="hf-1d8t" class="trend">→ No change</div></div>
+          <svg data-hf-id="hf-00gd" class="spark" width="110" height="40"><path data-hf-id="hf-c9ts" id="s-de" d="M4 20 L106 20" stroke="#e66767" /></svg>
+        </div>
+        <div data-hf-id="hf-5768" class="foot"><span data-hf-id="hf-lvlw"><b data-hf-id="hf-lwv9">3</b> assessments</span><span data-hf-id="hf-u7xo" class="tgt">◎ Target 6 (−1)</span></div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-let0" id="film-fg" data-layout-allow-overflow data-layout-allow-overlap>
+      <div data-hf-id="hf-g5k1" class="chip" id="ch-up" style="left: 1150px; top: 236px"><i data-hf-id="hf-mil6" style="background: #34d399"></i>English essay <b data-hf-id="hf-2d3x">A7 B6 C6 D7</b></div>
+      <div data-hf-id="hf-rsls" class="chip" id="ch-target" style="left: 196px; top: 836px"><i data-hf-id="hf-7zvw" style="background: #fbbf24"></i>Mathematics: <b data-hf-id="hf-tx92">7</b> needs level 7+ next task</div>
+      <div data-hf-id="hf-gshp" class="chip" id="ch-sync" style="left: 1330px; top: 852px"><i data-hf-id="hf-zpom" style="background: #818cf8"></i>ManageBac synced · <b data-hf-id="hf-mb6a">3</b> new deadlines</div>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true })
+    const count = (sel, to, at, dur) => {
+      const el = document.querySelector(sel)
+      const proxy = { v: 0 }
+      tl.fromTo(
+        proxy,
+        { v: 0 },
+        {
+          v: to,
+          duration: dur,
+          ease: "power2.out",
+          onUpdate: () => {
+            el.firstChild.nodeValue = proxy.v < 0.5 ? "–" : String(Math.round(proxy.v))
+          },
+        },
+        at,
+      )
+    }
+    const draw = (sel, at) => {
+      const p = document.querySelector(sel)
+      const len = Math.ceil(p.getTotalLength()) + 2
+      tl.fromTo(p, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.7, ease: "power2.inOut" }, at)
+    }
+
+    // Background plane drifts slowest
+    tl.fromTo("#film-bg", { scale: 1.18, y: 40 }, { scale: 1, y: 0, duration: 6.2, ease: "power2.inOut" }, 0)
+
+    // Act A (0–3.0): close-up on one subject; its grade counts up.
+    tl.fromTo("#film-cam", { scale: 2.2, y: 290.4 }, { scale: 2.2, y: 290.4, duration: 0.01 }, 0)
+    tl.fromTo("#c-ll", { opacity: 0.3, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.9, ease: "power3.out" }, 0.35)
+    tl.fromTo(["#b-ll", "#t-ll", "#f-ll"], { opacity: 0, filter: "blur(6px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.18, stagger: 0.12, ease: "power4.out" }, 2.1)
+    count("#g-ll", 6, 1.05, 1.15)
+    draw("#s-ll", 1.5)
+
+    // Act B (3.0–5.8): camera pulls back; the rest of the year lands around it.
+    tl.to("#film-cam", { scale: 1, y: 0, duration: 1.6, ease: "power2.inOut" }, 3.0)
+    tl.fromTo(
+      ["#c-fr", "#c-is", "#c-sc", "#c-ma", "#c-de"],
+      { opacity: 0, scale: 0.94, y: 24, filter: "blur(8px)" },
+      { opacity: 1, scale: 1, y: 0, filter: "blur(0px)", duration: 0.65, stagger: 0.08, ease: "expo.out" },
+      3.35,
+    )
+    count("#g-fr", 5, 3.6, 0.8)
+    count("#g-is", 5, 3.68, 0.8)
+    count("#g-sc", 6, 3.76, 0.8)
+    count("#g-ma", 5, 3.84, 0.8)
+    count("#g-de", 5, 3.92, 0.8)
+    ;["#s-fr", "#s-is", "#s-sc", "#s-ma", "#s-de"].forEach((s, i) => draw(s, 3.75 + i * 0.08))
+
+    // Foreground chips: enter later and travel further than the cards (parallax depth)
+    tl.fromTo("#ch-up", { opacity: 0, y: 70, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, 3.9)
+    tl.fromTo("#ch-target", { opacity: 0, y: 90, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, 4.05)
+    tl.fromTo("#ch-sync", { opacity: 0, y: 90, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, 4.2)
+    tl.to("#film-fg", { y: -60, duration: 2.0, ease: "none" }, 3.9)
+
+    // Act C (5.7–6.8): each card is carried into its row in the real dashboard as the product builds around it.
+    tl.to(["#ch-up", "#ch-target", "#ch-sync"], { opacity: 0, filter: "blur(8px)", duration: 0.22, stagger: 0.04, ease: "power3.in" }, 5.7)
+    const rows = { "#c-ll": 523, "#c-fr": 551, "#c-is": 579, "#c-sc": 607, "#c-ma": 635, "#c-de": 721 }
+    const centers = { "#c-fr": [512, 408], "#c-ll": [960, 408], "#c-is": [1408, 408], "#c-sc": [512, 672], "#c-ma": [960, 672], "#c-de": [1408, 672] }
+    Object.entries(rows).forEach(([sel, rowY], i) => {
+      const [cx, cy] = centers[sel]
+      tl.to(sel, { x: 456 - cx, y: rowY - cy, scale: 0.07, opacity: 0, filter: "blur(4px)", duration: 0.7, ease: "power3.in" }, 5.8 + i * 0.04)
+    })
+    tl.fromTo("#film-frame", { opacity: 0, scale: 1.06, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.85, ease: "power3.out" }, 5.95)
+    // 6.8–9.5: the product holds dead still for the tagline that sits over it.
+    tl.set({}, {}, 9.5)
+
+    window.__timelines["film"] = tl
+  </script>
+</template>
