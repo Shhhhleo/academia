@@ -34,6 +34,7 @@ export function QuickAdd() {
               onClick={() => openQuickAdd()}
               className="fixed right-5 bottom-5 z-40 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_10px_30px_-8px_color-mix(in_oklab,var(--primary)_70%,transparent)] transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none active:scale-95 sm:right-8 sm:bottom-8"
               aria-label="Quick add assessment"
+              data-tour="quick-add"
             />
           }
         >

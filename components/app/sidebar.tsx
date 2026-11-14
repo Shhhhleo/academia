@@ -80,7 +80,7 @@ export function SidebarNav({
 
       <nav aria-label="Main" className="flex-1 space-y-5 overflow-y-auto px-2 pb-4">
         {NAV_SECTIONS.map((section) => (
-          <div key={section.label}>
+          <div key={section.label} data-tour={`nav-${section.label.toLowerCase()}`}>
             {!collapsed && (
               <p className="mb-1 px-2.5 text-[11px] font-medium tracking-wide text-sidebar-foreground/50">{section.label}</p>
             )}

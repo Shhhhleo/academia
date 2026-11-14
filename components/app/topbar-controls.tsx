@@ -6,7 +6,7 @@ import { useTheme } from "next-themes"
 import { useTransition } from "react"
 import { useMounted } from "@/hooks/use-mounted"
 import { formatDistanceToNow } from "date-fns"
-import { Bell, CheckCheck, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react"
+import { Bell, CheckCheck, LogOut, Monitor, Moon, Settings, Sparkles, Sun } from "lucide-react"
 import { toast } from "sonner"
 import {
   DropdownMenu,
@@ -23,17 +23,18 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { signOut } from "@/lib/auth/actions"
 import { markNotificationsRead, selectYear } from "@/lib/data/actions"
+import { startTour } from "@/lib/tour"
 import { cn } from "@/lib/utils"
 import { useShell } from "./shell-context"
 
 const iconButton =
   "relative grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 
-export function YearSelect({ className }: { className?: string }) {
+export function YearSelect({ className, ...rest }: { className?: string; "data-tour"?: string }) {
   const { years, yearId } = useShell()
   const [pending, start] = useTransition()
   return (
-    <div className={cn("w-[7.5rem]", className)}>
+    <div className={cn("w-[7.5rem]", className)} {...rest}>
       <label htmlFor="year-select" className="sr-only">
         Academic year
       </label>
@@ -179,6 +180,9 @@ export function UserMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => router.push("/settings")}>
           <Settings aria-hidden="true" /> Settings
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => startTour()}>
+          <Sparkles aria-hidden="true" /> Take the tour
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={() => void signOut()}>
