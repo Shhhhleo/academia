@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest"
+import { gradeRequest } from "./rubrics"
+import { gradeTask, parseRubric } from "./score"
+
+const req = (o: Record<string, string>) =>
+  gradeRequest.parse({ programme: "MYP", subjectName: "English", subjectGroup: "Language and literature", year: "3", taskType: "Essay", ...o })
+
+const strong = `In "The Sea", the poet uses imagery of crashing waves to suggest the speaker's loneliness. This suggests that isolation is overwhelming, because the reader feels the force of the water.
+
+Furthermore, the tone shifts in the second stanza. For example, the phrase "silent shore" implies calm acceptance. This shows how the theme of grief develops, and the symbol of the tide represents the passing of time.
+
+However, an alternative interpretation is that the sea is a source of comfort. In my view, the poet's purpose is to show that the same image can carry different connotations depending on the character's context.
+
+Moreover, the structure reinforces this effect. The short final line creates a pause, which means the reader lingers on the speaker's sense of loss. As a result, the technique deepens our understanding.
+
+In conclusion, the poet's careful use of imagery, tone and symbolism helps the reader understand that grief is both overwhelming and, over time, something that can be accepted.`
+const weak = "the poem is about the sea. it is sad. the sea is big. i liked it. the end of the poem is good."
+
+describe("gradeTask", () => {
+  it("grades a developed essay above a weak one", () => {
+    const a = gradeTask(req({}), strong)
+    const b = gradeTask(req({}), weak)
+    expect(a.criteria.map((c) => c.name)).toEqual(["Analysing", "Organizing", "Producing text", "Using language"])
+    expect(a.overall_grade).toBeGreaterThan(b.overall_grade)
+    const words: Record<string, string> = { "1–2": "limited", "3–4": "adequate", "5–6": "substantial", "7–8": "excellent" }
+    for (const c of a.criteria) {
+      expect(c.score).toBeLessThanOrEqual(c.max)
+      expect(c.justification).toContain(words[c.band])
+    }
+    expect(a.criteria[0].strengths.join(" ")).not.toMatch(/\bimpl\b/)
+    expect(b.next_steps.length).toBeGreaterThan(0)
+  })
+
+  it("refuses to grade almost nothing", () => {
+    const r = gradeTask(req({}), "too short")
+    expect(r.criteria.every((c) => c.score === 0)).toBe(true)
+    expect(r.summary).toMatch(/isn't enough text/)
+  })
+
+  it("uses DP component rubrics", () => {
+    const r = gradeTask(req({ programme: "DP", taskType: "Extended essay", subjectGroup: "Sciences" }), strong)
+    expect(r.criteria.map((c) => c.max)).toEqual([6, 6, 12, 4, 6])
+    expect(r.overall_grade).toBeGreaterThanOrEqual(1)
+  })
+
+  it("grades against a student-supplied rubric", () => {
+    const r = gradeTask(req({ rubric: "Criterion A: Use of imagery (0-6)\nexplains imagery and its effect on the reader\nCriterion B: Conclusion (out of 4)" }), strong)
+    expect(r.criteria.map((c) => [c.id, c.name, c.max])).toEqual([["A", "Use of imagery", 6], ["B", "Conclusion", 4]])
+    expect(r.summary).toContain("your rubric")
+  })
+
+  it("falls back to the IB rubric when the pasted text has no criteria", () => {
+    const r = gradeTask(req({ rubric: "Write an essay analysing imagery in the poem." }), strong)
+    expect(r.criteria).toHaveLength(4)
+    expect(r.caveats).toMatch(/built-in IB criteria/)
+  })
+})
+
+describe("parseRubric", () => {
+  it("reads maxima in several notations and defaults the rest", () => {
+    const r = parseRubric("A. Knowing (max 8)\nCriterion B – Investigating /6\nC) Communicating", 8)
+    expect(r.map((c) => [c.id, c.name, c.max, c.kind])).toEqual([
+      ["A", "Knowing", 8, "content"],
+      ["B", "Investigating", 6, "content"],
+      ["C", "Communicating", 8, "organisation"],
+    ])
+  })
+})
