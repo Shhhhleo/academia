@@ -13,6 +13,7 @@ export const APP_ROUTES = [
   "/todos",
   "/reminders",
   "/brief",
+  "/grader",
 ] as const
 
 export const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"] as const

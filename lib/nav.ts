@@ -3,6 +3,7 @@ import {
   BookOpen,
   CalendarSync,
   Calculator,
+  FileCheck,
   CalendarDays,
   ChartLine,
   ClipboardList,
@@ -45,6 +46,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: "Insights",
     items: [
+      { href: "/grader", label: "Task Grader", icon: FileCheck, keywords: "grade mark rubric essay worksheet upload feedback ai" },
       { href: "/calculator", label: "Grade Calculator", icon: Calculator, keywords: "what if predict required" },
       { href: "/goals", label: "Goals & Progress", icon: Target, keywords: "targets" },
       { href: "/analytics", label: "Analytics", icon: ChartLine, keywords: "charts trends statistics" },
