@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { gradeRequest } from "./rubrics"
+import { SUBJECT_GROUPS } from "@/lib/ib"
+import { builtInRubric, gradeRequest, TASK_TYPES, type TaskType } from "./rubrics"
 import { gradeTask, parseRubric } from "./score"
 
 const req = (o: Record<string, string>) =>
@@ -62,6 +63,59 @@ describe("gradeTask", () => {
     expect(onTask.next_steps.join(" ")).not.toMatch(/Answer the task/)
     expect(offTask.next_steps[0]).toMatch(/^Answer the task directly: it asks about economic/)
     expect(onTask.criteria[0].score).toBeGreaterThan(offTask.criteria[0].score)
+  })
+})
+
+describe("builtInRubric", () => {
+  it("gives every programme, group and task type a complete criteria set, never silently falling back", () => {
+    for (const programme of ["MYP", "DP"] as const) {
+      for (const group of SUBJECT_GROUPS[programme]) {
+        for (const task of TASK_TYPES) {
+          const r = builtInRubric(programme, group, task, "Some subject")
+          expect(r.criteria.length, `${programme} ${group} ${task}`).toBeGreaterThan(0)
+          expect(new Set(r.criteria.map((c) => c.id)).size).toBe(r.criteria.length)
+          expect(r.criteria.every((c) => c.max > 0 && c.name)).toBe(true)
+          expect(r.notes.some((n) => n.includes("isn't set"))).toBe(false)
+          if (programme === "MYP") expect(r.label).toBe(`MYP ${group} criteria`)
+          // Only Language A work should get Language A criteria.
+          if (!/language and literature|TOK|Extended/i.test(`${group} ${r.label}`)) expect(r.label).not.toMatch(/Language A/)
+        }
+      }
+    }
+  })
+
+  it("works out the group from the subject name when it isn't set", () => {
+    const art = builtInRubric("MYP", undefined, "Project / portfolio", "Visual Art")
+    expect(art.criteria.map((c) => c.name)).toEqual(["Investigating", "Developing", "Creating/performing", "Evaluating"])
+    expect(art.notes[0]).toMatch(/Arts was worked out from the subject name/)
+    const cases: [ "MYP" | "DP", string, TaskType, string][] = [
+      ["DP", "Visual Arts", "Essay", "DP arts assessment objectives"],
+      ["DP", "Biology HL", "Lab report", "DP Sciences IA criteria"],
+      ["DP", "Economics SL", "Internal assessment (IA)", "DP Economics IA criteria (one commentary)"],
+      ["DP", "History", "Internal assessment (IA)", "DP History IA criteria"],
+      ["DP", "French B", "Essay", "DP Language B writing criteria"],
+      ["DP", "English A: Language and Literature", "Internal assessment (IA)", "DP Language A individual oral criteria"],
+      ["DP", "Theory of Knowledge", "Other", "DP TOK essay criteria"],
+      ["MYP", "Spanish", "Essay", "MYP Language acquisition criteria"],
+      ["MYP", "Physical Education", "Essay", "MYP Physical and health education criteria"],
+      ["MYP", "Digital Design", "Project / portfolio", "MYP Design criteria"],
+      ["MYP", "Integrated Sciences", "Lab report", "MYP Sciences criteria"],
+    ]
+    for (const [programme, name, task, label] of cases) expect(builtInRubric(programme, undefined, task, name).label, name).toBe(label)
+  })
+
+  it("keeps a group that was set, and says so when it can't tell", () => {
+    expect(builtInRubric("MYP", "Arts", "Essay", "English").label).toBe("MYP Arts criteria")
+    const unknown = builtInRubric("MYP", undefined, "Essay", "Advisory")
+    expect(unknown.label).toBe("MYP Language and literature criteria")
+    expect(unknown.notes[0]).toMatch(/couldn't be worked out/)
+  })
+
+  it("grades a Visual Art subject with no group against the Arts criteria", () => {
+    const r = gradeTask(req({ subjectName: "Visual Art", subjectGroup: "" }), strong)
+    expect(r.criteria.map((c) => c.name)).toEqual(["Investigating", "Developing", "Creating/performing", "Evaluating"])
+    expect(r.summary).toContain("MYP Arts criteria")
+    expect(r.caveats).toMatch(/worked out from the subject name/)
   })
 })
 
