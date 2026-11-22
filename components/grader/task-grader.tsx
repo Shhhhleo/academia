@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
-import { MYP_RUBRICS, TASK_TYPES, type GradeResult } from "@/lib/grader/rubrics"
+import { builtInRubric, TASK_TYPES, type GradeResult, type TaskType } from "@/lib/grader/rubrics"
 import { SUBJECT_GROUPS } from "@/lib/ib"
 
 const OTHER = "__other"
@@ -52,6 +52,8 @@ export function TaskGrader() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GradeResult | null>(null)
+  const [taskType, setTaskType] = useState<TaskType>(TASK_TYPES[0])
+  const preview = subject ? builtInRubric(subject.programme, subject.subject_group ?? undefined, taskType, subject.name) : null
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -116,6 +118,7 @@ export function TaskGrader() {
               <div>
                 <label htmlFor="g-group" className={label}>Subject group</label>
                 <NativeSelect id="g-group" name="subjectGroup" key={programme}>
+                  <option value="">Work it out from the name</option>
                   {SUBJECT_GROUPS[programme].map((g) => (
                     <option key={g} value={g}>{g}</option>
                   ))}
@@ -148,7 +151,7 @@ export function TaskGrader() {
             </div>
             <div>
               <label htmlFor="g-type" className={label}>Task type</label>
-              <NativeSelect id="g-type" name="taskType">
+              <NativeSelect id="g-type" name="taskType" value={taskType} onChange={(e) => setTaskType(e.target.value as TaskType)}>
                 {TASK_TYPES.map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
@@ -194,8 +197,10 @@ export function TaskGrader() {
             <div className="grid place-items-center gap-2 py-16 text-center text-sm text-muted-foreground">
               <FileUp className="size-8" aria-hidden="true" />
               <p>Your graded evaluation appears here, criterion by criterion.</p>
-              {prog === "MYP" && subject?.subject_group && MYP_RUBRICS[subject.subject_group] && (
-                <p className="text-xs">Criteria: {MYP_RUBRICS[subject.subject_group].map((c) => `${c.id} ${c.name}`).join(" · ")}</p>
+              {preview && (
+                <p className="text-xs">
+                  {preview.label}: {preview.criteria.map((c) => `${c.id} ${c.name}`).join(" · ")}
+                </p>
               )}
             </div>
           </Panel>

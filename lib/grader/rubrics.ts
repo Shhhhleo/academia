@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { SUBJECT_GROUPS } from "@/lib/ib"
 
 /** How a criterion is judged: by the ideas it rewards, by structure, or by language quality. */
 export type Kind = "content" | "organisation" | "language"
@@ -116,19 +117,141 @@ const DP_GENERIC_IA = [
   c("D", "Communication", "organisation", "introduc, conclu, citation, bibliograph, heading", 6),
 ]
 
-export function builtInRubric(programme: "MYP" | "DP", subjectGroup: string | undefined, taskType: TaskType): { label: string; criteria: RubricCriterion[] } {
-  if (programme === "MYP") {
-    const criteria = (subjectGroup && MYP_RUBRICS[subjectGroup]) || MYP_RUBRICS["Language and literature"]
-    return { label: `MYP ${subjectGroup && MYP_RUBRICS[subjectGroup] ? subjectGroup : "general"} criteria`, criteria }
+// Language A individual oral.
+const DP_LANG_A_IA = [
+  c("A", "Knowledge, understanding and interpretation", "content", "text, work, global issue, interpret, understand, evidence, extract, author, context", 10),
+  c("B", "Analysis and evaluation", "content", "analys, evaluat, technique, effect, impl, suggest, authorial choice, significan", 10),
+  c("C", "Focus and organization", "organisation", "global issue, introduc, conclu, balance, focus", 10),
+  c("D", "Language", "language", "", 10),
+]
+
+// Language B Paper 1 (writing) and individual oral.
+const DP_LANG_B = [
+  c("A", "Language", "language", "", 12),
+  c("B", "Message", "content", "idea, detail, example, explain, support, develop, relevant, opinion", 12),
+  c("C", "Conceptual understanding", "content", "audience, purpose, register, format, tone, context, text type", 6),
+]
+const DP_LANG_B_IA = [
+  c("A", "Language", "language", "", 12),
+  c("B1", "Message: visual stimulus", "content", "image, stimulus, photo, culture, theme, describe, connect", 6),
+  c("B2", "Message: conversation", "content", "opinion, idea, explain, example, respond, develop", 6),
+  c("C", "Interactive skills", "content", "question, respond, agree, disagree, conversation, opinion, clarif", 6),
+]
+
+// Assessment objectives shared across a group's papers (each paper's markbands differ).
+const DP_IS = [
+  c("A", "Knowledge and understanding", "content", "concept, defin, theory, term, context, case study, example, knowledge", 5),
+  c("B", "Application and analysis", "content", "analys, apply, case, evidence, data, cause, effect, factor, example", 5),
+  c("C", "Synthesis and evaluation", "content", "evaluat, perspective, argument, limitation, however, significan, extent, judgement, conclu, counter", 5),
+  c("D", "Structure and use of skills", "organisation", "introduc, conclu, paragraph, source, citation", 5),
+]
+const DP_HISTORY_IA = [
+  c("A", "Identification and evaluation of sources", "content", "source, origin, purpose, value, limitation, content, provenance", 6),
+  c("B", "Investigation", "content", "argument, analys, evaluat, evidence, perspective, conclu, question, historian, interpretation", 15),
+  c("C", "Reflection", "content", "reflect, historian, method, challenge, limitation, i learned, knowledge", 4),
+]
+const DP_ECON_IA = [
+  c("A", "Diagrams", "content", "diagram, curve, axis, graph, label, demand, supply", 3),
+  c("B", "Terminology", "content", "defin, term, elasticit, market, price, cost", 2),
+  c("C", "Application and analysis", "content", "article, apply, analys, theory, explain, impact", 3),
+  c("D", "Key concept", "content", "key concept, scarcity, choice, efficiency, equity, well-being, sustainab, change, interdependence, intervention", 3),
+  c("E", "Evaluation", "content", "evaluat, stakeholder, short run, long run, advantage, disadvantage, assumption, conclu, judgement", 3),
+  c("F", "Rubric requirements", "organisation", "article, source, date, word count, unit", 3),
+]
+const DP_GEOG_IA = [
+  c("A", "Fieldwork question and geographic context", "content", "fieldwork question, hypothes, location, map, context", 3),
+  c("B", "Method(s) of investigation", "content", "method, sample, data collection, questionnaire, survey, measure", 3),
+  c("C", "Quality and treatment of information collected", "content", "data, table, graph, map, chart, present, statistic", 6),
+  c("D", "Written analysis", "content", "analys, trend, pattern, anomal, explain, evidence, statistic, correlation", 8),
+  c("E", "Conclusions", "content", "conclu, hypothes, answer, finding", 2),
+  c("F", "Evaluation", "content", "evaluat, limitation, improve, reliab, weakness", 3),
+  c("G", "Formal requirements", "organisation", "title, map, citation, bibliograph, contents, word count", 3),
+]
+const DP_SCI = [
+  c("A", "Knowledge and understanding", "content", "theory, concept, model, law, principle, defin, explain, process", 6),
+  c("B", "Application", "content", "apply, calculat, example, context, predict, explain, data", 6),
+  c("C", "Analysis and evaluation", "content", "data, trend, graph, analys, evaluat, uncertaint, limitation, conclu, error", 6),
+  c("D", "Communication", "organisation", "introduc, conclu, table, graph, units, label, reference", 4),
+]
+const DP_MATHS = [
+  c("A", "Knowledge and understanding", "content", "formula, equation, defin, value, calculat, function, theorem", 6),
+  c("B", "Problem solving", "content", "solve, method, strategy, model, step, substitut, answer", 6),
+  c("C", "Communication and interpretation", "organisation", "notation, diagram, graph, table, therefore, units, label", 4),
+  c("D", "Reasoning", "content", "justif, prove, therefore, because, hence, verif, show that, deduce", 4),
+]
+const DP_ARTS = [
+  c("A", "Investigating context and practice", "content", "artist, research, movement, influence, culture, context, analys, style, tradition", 6),
+  c("B", "Developing ideas and skills", "content", "idea, develop, experiment, process, sketch, technique, skill, intention, media, refine", 6),
+  c("C", "Creating and presenting", "content", "creat, final, piece, artwork, exhibition, present, perform, outcome, medium, composition", 6),
+  c("D", "Reflecting and evaluating", "content", "reflect, evaluat, improve, feedback, strength, weakness, intention, audience, meaning", 6),
+]
+
+/** Words in a subject's name that give away its group, checked in order (null: no such group in that programme). */
+const NAME_GROUPS: [RegExp, string | null, string | null][] = [
+  [/personal project/i, "Personal project", null],
+  [/\b(tok|theory of knowledge|extended essay)\b/i, null, "Core (TOK / EE)"],
+  [/acquisition|ab initio|\bphase \d|\s+b$/i, "Language acquisition", "Language acquisition"],
+  [/english|literature|lang(uage)?\s*(and|&)\s*lit|lang\s*lit|language a|\s+a$/i, "Language and literature", "Studies in language and literature"],
+  [/design|computer|coding|technolog|\bict\b/i, "Design", "Sciences"],
+  [/scien|biolog|chemi|physics|environment|\bess\b/i, "Sciences", "Sciences"],
+  [/math/i, "Mathematics", "Mathematics"],
+  [/\barts?\b|visual|music|drama|theat|dance|film|media|photograph/i, "Arts", "The arts"],
+  [/physical|\bp\.?e\b|\bphe\b|health|sport|fitness/i, "Physical and health education", null],
+  [/histor|geograph|econom|business|psycholog|philosoph|politic|individuals|societ|humanit|anthropolog|global|social stud/i, "Individuals and societies", "Individuals and societies"],
+  [/french|spanish|german|mandarin|chinese|hindi|japanese|arabic|italian|korean|portuguese|russian|dutch|latin|tamil|urdu|sanskrit|language/i, "Language acquisition", "Language acquisition"],
+]
+
+/** The subject group to grade against: the one set if valid, else worked out from the subject's name. */
+export function resolveGroup(programme: "MYP" | "DP", subjectGroup: string | undefined, subjectName: string | undefined) {
+  if (subjectGroup && (SUBJECT_GROUPS[programme] as readonly string[]).includes(subjectGroup)) return { group: subjectGroup, inferred: false }
+  const hit = NAME_GROUPS.find(([re, myp, dp]) => (programme === "MYP" ? myp : dp) && re.test(subjectName ?? ""))
+  return hit ? { group: (programme === "MYP" ? hit[1] : hit[2])!, inferred: true } : null
+}
+
+export function builtInRubric(
+  programme: "MYP" | "DP",
+  subjectGroup: string | undefined,
+  taskType: TaskType,
+  subjectName?: string,
+): { label: string; criteria: RubricCriterion[]; notes: string[] } {
+  const resolved = resolveGroup(programme, subjectGroup, subjectName)
+  const fallback = programme === "MYP" ? "Language and literature" : "Studies in language and literature"
+  const group = resolved?.group ?? fallback
+  const notes = !resolved
+    ? [`The subject group isn't set and couldn't be worked out from the subject name, so ${fallback} criteria were used. Set the subject group in My Subjects to grade against the right criteria.`]
+    : resolved.inferred
+      ? [`The subject group isn't set, so ${group} was worked out from the subject name. Set it in My Subjects if that's wrong.`]
+      : []
+  const pick = (label: string, criteria: RubricCriterion[], note?: string) => ({ label, criteria, notes: note ? [...notes, note] : notes })
+  const ownRubric = "paste its rubric into \"Your own rubric\" to grade against the exact criteria."
+
+  if (programme === "MYP") return pick(`MYP ${group} criteria`, MYP_RUBRICS[group])
+
+  const name = subjectName ?? ""
+  if (taskType === "Extended essay") return pick("DP Extended Essay criteria", DP_EE)
+  if (taskType === "TOK essay" || (group === "Core (TOK / EE)" && /tok|theory of knowledge/i.test(name))) return pick("DP TOK essay criteria", DP_TOK)
+  if (group === "Core (TOK / EE)") return pick("DP Extended Essay criteria", DP_EE)
+
+  const ia = taskType === "Internal assessment (IA)"
+  switch (group) {
+    case "Studies in language and literature":
+      return ia ? pick("DP Language A individual oral criteria", DP_LANG_A_IA) : pick("DP Language A essay criteria", DP_ESSAY)
+    case "Language acquisition":
+      return ia ? pick("DP Language B individual oral criteria", DP_LANG_B_IA) : pick("DP Language B writing criteria", DP_LANG_B)
+    case "Individuals and societies":
+      if (ia && /histor/i.test(name)) return pick("DP History IA criteria", DP_HISTORY_IA)
+      if (ia && /econom/i.test(name)) return pick("DP Economics IA criteria (one commentary)", DP_ECON_IA)
+      if (ia && /geograph/i.test(name)) return pick("DP Geography IA criteria", DP_GEOG_IA)
+      return ia
+        ? pick("DP IA criteria (general)", DP_GENERIC_IA, `Each Individuals and societies subject has its own IA criteria; ${ownRubric}`)
+        : pick("DP Individuals and societies assessment objectives", DP_IS, `Each paper has its own markbands; ${ownRubric}`)
+    case "Sciences":
+      return ia || taskType === "Lab report" ? pick("DP Sciences IA criteria", DP_SCIENCE_IA) : pick("DP Sciences assessment objectives", DP_SCI)
+    case "Mathematics":
+      return ia ? pick("DP Mathematics IA criteria", DP_MATHS_IA) : pick("DP Mathematics assessment objectives", DP_MATHS)
+    default:
+      return pick("DP arts assessment objectives", DP_ARTS, `Each arts component (portfolio, comparative study, exhibition, performance) has its own rubric; ${ownRubric}`)
   }
-  if (taskType === "Extended essay") return { label: "DP Extended Essay criteria", criteria: DP_EE }
-  if (taskType === "TOK essay") return { label: "DP TOK essay criteria", criteria: DP_TOK }
-  if (taskType === "Internal assessment (IA)") {
-    if (subjectGroup?.includes("Sciences")) return { label: "DP Sciences IA criteria", criteria: DP_SCIENCE_IA }
-    if (subjectGroup?.includes("Mathematics")) return { label: "DP Mathematics IA criteria", criteria: DP_MATHS_IA }
-    return { label: "DP IA criteria (general)", criteria: DP_GENERIC_IA }
-  }
-  return { label: "DP written-work criteria", criteria: DP_ESSAY }
 }
 
 export const TASK_TYPES = [

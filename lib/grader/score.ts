@@ -133,19 +133,21 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   const expected = Math.round(fixedLength ? base : base * (isMyp ? 0.6 + 0.1 * input.year : 1.2))
 
   const caveats = ["This is an automatic estimate: it checks your work for what the rubric rewards (key ideas, evidence, explanation, structure and language), but it can't judge whether your ideas are correct. Use it as a guide before your teacher marks it."]
-  let { label, criteria } = builtInRubric(input.programme, input.subjectGroup, input.taskType)
-  if (input.rubric?.trim()) {
-    const custom = parseRubric(input.rubric, isMyp ? 8 : 10)
-    if (custom.length) {
-      ;({ label, criteria } = { label: "your rubric", criteria: custom })
-    } else {
+  const builtIn = builtInRubric(input.programme, input.subjectGroup, input.taskType, input.subjectName)
+  let { label, criteria } = builtIn
+  const custom = input.rubric?.trim() ? parseRubric(input.rubric, isMyp ? 8 : 10) : []
+  if (custom.length) {
+    ;({ label, criteria } = { label: "your rubric", criteria: custom })
+  } else {
+    caveats.push(...builtIn.notes)
+    if (input.rubric?.trim()) {
       // Not a criteria list (probably a task sheet): use its words as extra ideas the content criteria reward.
       const extra = keywordsFrom(input.rubric, 8)
       criteria = criteria.map((cr) => (cr.kind === "content" ? { ...cr, keywords: [...cr.keywords, ...extra] } : cr))
       caveats.push("Your rubric had no criteria lines (like \"Criterion A: Analysing (0–8)\"), so the built-in IB criteria were used, with your task sheet's key terms added.")
     }
   }
-  if (isMyp && input.subjectGroup === "Language acquisition" && !input.rubric) caveats.push("Listening and speaking are normally assessed from audio; written work only gives a rough indication for those criteria.")
+  if (label === "MYP Language acquisition criteria") caveats.push("Listening and speaking are normally assessed from audio; written work only gives a rough indication for those criteria.")
 
   const signals = analyse(text, expected)
   const taskTerms = input.task?.trim() ? keywordsFrom(input.task, 20).filter((k) => !COMMAND_TERMS.has(k)).slice(0, 10) : []
