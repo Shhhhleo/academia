@@ -9,6 +9,8 @@ const TRANSITIONS = phrases("firstly|secondly|furthermore|moreover|in addition|a
 const CONNECTIVES = phrases("because|therefore|thus|hence|this shows|this suggests|this implies|this demonstrates|this highlights|as a result|which means|consequently|although|whereas|due to|so that")
 const EXAMPLES = phrases("for example|for instance|such as|e\\.g\\.|according to|as seen in|as shown")
 const FRAMING = phrases("in conclusion|to conclude|in summary|to summarise|to summarize|overall|this essay|this report|introduction|conclusion")
+// IB command terms say what to do, not what to write about, so a task's own terms skip them.
+const COMMAND_TERMS = new Set("analyse analyze evaluate discuss explain describe compare contrast examine justify outline identify define suggest investigate explore consider assess write answer question respond using include".split(" ").map((w) => w.slice(0, 7)))
 const STOP = new Set("about above after again against because been before being below between both could does doing down during each from further have having here how into itself more most other ought over same should some such than that their theirs them then there these they this those through under until very what when where which while whom with would your yours will shall must also only just like make made many much well were the and for are but not you all any can her was one our out who get has him his how its may new now old see two way use".split(" "))
 
 /** Measurable signals of quality, each 0–1. */
@@ -58,7 +60,7 @@ function keywordHits(c: RubricCriterion, s: Signals) {
 
 const LEVEL = ["limited", "adequate", "substantial", "excellent"] as const
 
-function scoreCriterion(c: RubricCriterion, s: Signals, expected: number, mypBands: boolean): CriterionResult & { fraction: number } {
+function scoreCriterion(c: RubricCriterion, s: Signals, expected: number, mypBands: boolean, taskFit = 1): CriterionResult & { fraction: number } {
   const { found, missing } = keywordHits(c, s)
   const kw = c.keywords.length ? clamp(found.length / Math.min(c.keywords.length, 6)) : s.structure
   const language = 0.5 * s.vocabulary + 0.3 * s.variety + 0.2 * s.sentenceFit
@@ -68,7 +70,7 @@ function scoreCriterion(c: RubricCriterion, s: Signals, expected: number, mypBan
     language: 0.7 * language + 0.3 * s.structure,
   }
   // Short work can't show a criterion fully, however good the sentences are.
-  const fraction = s.words < 20 ? 0 : clamp(raw[c.kind] * (0.35 + 0.65 * s.length))
+  const fraction = s.words < 20 ? 0 : clamp(raw[c.kind] * (0.35 + 0.65 * s.length) * (c.kind === "content" ? taskFit : 1))
   const score = Math.round(fraction * c.max)
   // Quarters of the scale, matching MYP bands: 1–2 limited, 3–4 adequate, 5–6 substantial, 7–8 excellent.
   const level = LEVEL[Math.min(3, Math.max(0, Math.ceil((score / c.max) * 4) - 1))]
@@ -146,17 +148,27 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   if (isMyp && input.subjectGroup === "Language acquisition" && !input.rubric) caveats.push("Listening and speaking are normally assessed from audio; written work only gives a rough indication for those criteria.")
 
   const signals = analyse(text, expected)
-  const results = criteria.map((cr) => scoreCriterion(cr, signals, expected, isMyp && cr.max === 8))
+  const taskTerms = input.task?.trim() ? keywordsFrom(input.task, 20).filter((k) => !COMMAND_TERMS.has(k)).slice(0, 10) : []
+  const taskWords = input.task?.toLowerCase().match(/[a-z]{5,}/g) ?? []
+  const missedTask = taskTerms.filter((k) => ![...signals.tokens].some((t) => t.startsWith(k))).map((k) => taskWords.find((w) => w.startsWith(k)) ?? k)
+  // Off-task work loses up to 40% on content criteria; covering 70% of the task's terms counts as on task.
+  const taskFit = taskTerms.length ? 0.6 + 0.4 * clamp((1 - missedTask.length / taskTerms.length) / 0.7) : 1
+  const results = criteria.map((cr) => scoreCriterion(cr, signals, expected, isMyp && cr.max === 8, taskFit))
   const total = results.reduce((a, r) => a + r.score, 0)
   const max = results.reduce((a, r) => a + r.max, 0)
   const overall = isMyp ? mypGradeFromTotal(Math.round((total / max) * 32)) : percentToGrade((total / max) * 100, DEFAULT_DP_BOUNDARIES)
 
   const ranked = [...results].sort((a, b) => a.fraction - b.fraction)
-  const next = [...new Set(ranked.flatMap((r) => r.improvements))].slice(0, 5)
+  const improvements = ranked.flatMap((r) => r.improvements)
+  if (missedTask.length > taskTerms.length / 2) {
+    improvements.unshift(`Answer the task directly: it asks about ${missedTask.slice(0, 4).join(", ")}, which your work barely mentions.`)
+  }
+  const next = [...new Set(improvements)].slice(0, 5)
+  const taskLine = taskTerms.length ? ` Task fit: ${taskTerms.length - missedTask.length} of ${taskTerms.length} key terms from the task appear.` : ""
   const summary =
     signals.words < 20
       ? "There isn't enough text to grade. Upload the full piece of work or paste it in."
-      : `${signals.words} words graded against ${label}. Strongest: ${ranked.at(-1)!.name} (${ranked.at(-1)!.score}/${ranked.at(-1)!.max}). Most room to improve: ${ranked[0].name} (${ranked[0].score}/${ranked[0].max}).`
+      : `${signals.words} words graded against ${label}. Strongest: ${ranked.at(-1)!.name} (${ranked.at(-1)!.score}/${ranked.at(-1)!.max}). Most room to improve: ${ranked[0].name} (${ranked[0].score}/${ranked[0].max}).${taskLine}`
 
   return {
     overall_grade: overall,

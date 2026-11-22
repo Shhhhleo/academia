@@ -157,6 +157,12 @@ export function TaskGrader() {
           </div>
 
           <div>
+            <label htmlFor="g-task" className={label}>The task or question (optional)</label>
+            <Textarea id="g-task" name="task" rows={3} maxLength={5_000} aria-describedby="g-task-hint" placeholder="e.g. Analyse how the poet uses imagery to present grief." />
+            <p id="g-task-hint" className="mt-1 text-xs text-muted-foreground">Paste the question or instructions your teacher set, so the grade checks you answered that task.</p>
+          </div>
+
+          <div>
             <label htmlFor="g-file" className={label}>Upload your work</label>
             <Input id="g-file" name="file" type="file" accept=".pdf,.docx,.txt,.md" aria-describedby="g-file-hint" />
             <p id="g-file-hint" className="mt-1 text-xs text-muted-foreground">PDF, Word (.docx) or .txt. Read on your device, so any size works. Google Docs: download as .docx or PDF.</p>

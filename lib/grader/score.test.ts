@@ -54,6 +54,15 @@ describe("gradeTask", () => {
     expect(r.criteria).toHaveLength(4)
     expect(r.caveats).toMatch(/built-in IB criteria/)
   })
+
+  it("checks the work answers the task that was set", () => {
+    const onTask = gradeTask(req({ task: "Analyse how the poet uses imagery and symbolism to present grief." }), strong)
+    const offTask = gradeTask(req({ task: "Evaluate the economic consequences of globalisation for developing countries." }), strong)
+    expect(onTask.summary).toMatch(/Task fit: \d+ of \d+ key terms/)
+    expect(onTask.next_steps.join(" ")).not.toMatch(/Answer the task/)
+    expect(offTask.next_steps[0]).toMatch(/^Answer the task directly: it asks about economic/)
+    expect(onTask.criteria[0].score).toBeGreaterThan(offTask.criteria[0].score)
+  })
 })
 
 describe("parseRubric", () => {
