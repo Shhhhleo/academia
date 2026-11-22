@@ -170,6 +170,7 @@ export const gradeRequest = z.object({
   year: z.coerce.number().int().min(1).max(5),
   taskType: z.enum(TASK_TYPES),
   rubric: z.string().max(20_000).optional(),
+  task: z.string().max(5_000).optional(),
   text: z.string().max(200_000).optional(),
 })
 export type GradeRequest = z.infer<typeof gradeRequest>
