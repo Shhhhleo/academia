@@ -14,6 +14,34 @@ import { SUBJECT_GROUPS } from "@/lib/ib"
 
 const OTHER = "__other"
 const label = "mb-1.5 block text-sm font-medium"
+const MAX_TEXT = 200_000 // matches gradeRequest.text
+
+class UserError extends Error {}
+
+// Read files in the browser and send only text: Vercel rejects request bodies over 4.5 MB.
+async function fileText(file: File): Promise<string> {
+  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name)
+  const isDocx = /\.docx$/i.test(file.name)
+  const isText = file.type.startsWith("text/") || /\.(txt|md)$/i.test(file.name)
+  if (!isPdf && !isDocx && !isText) {
+    throw new UserError("Upload a PDF, Word (.docx) or .txt file. Photos of handwriting can't be read, so type or paste the text instead.")
+  }
+  try {
+    const data = await file.arrayBuffer()
+    if (isPdf) {
+      const { extractText } = await import("unpdf")
+      return (await extractText(new Uint8Array(data), { mergePages: true })).text
+    }
+    if (isDocx) {
+      const { default: mammoth } = await import("mammoth")
+      return (await mammoth.extractRawText({ arrayBuffer: data })).value
+    }
+    return new TextDecoder().decode(data)
+  } catch (err) {
+    console.error("grader: could not read file", err)
+    throw new UserError("That file couldn't be opened. Try saving it again as PDF or Word, or paste the text.")
+  }
+}
 
 export function TaskGrader() {
   const { subjects, profile } = useShell()
@@ -38,12 +66,23 @@ export function TaskGrader() {
     setError(null)
     setResult(null)
     try {
+      const file = fd.get("file")
+      fd.delete("file")
+      if (file instanceof File && file.size > 0) {
+        const read = await fileText(file)
+        const pasted = String(fd.get("text") ?? "")
+        if (!read.trim() && !pasted.trim()) {
+          throw new UserError("No text found in that file. If it's a scanned PDF, upload a typed version or paste the text.")
+        }
+        // shortcut: grades the first 200k characters (schema cap); raise both if longer work must be graded.
+        fd.set("text", `${read}\n\n${pasted}`.slice(0, MAX_TEXT))
+      }
       const res = await fetch("/api/grader", { method: "POST", body: fd })
       const json = await res.json().catch(() => null)
       if (!res.ok) setError(json?.error ?? "Something went wrong while grading. Try again.")
       else setResult(json as GradeResult)
-    } catch {
-      setError("Couldn't reach the grader. Check your connection and try again.")
+    } catch (err) {
+      setError(err instanceof UserError ? err.message : "Couldn't reach the grader. Check your connection and try again.")
     } finally {
       setBusy(false)
     }
@@ -120,7 +159,7 @@ export function TaskGrader() {
           <div>
             <label htmlFor="g-file" className={label}>Upload your work</label>
             <Input id="g-file" name="file" type="file" accept=".pdf,.docx,.txt,.md" aria-describedby="g-file-hint" />
-            <p id="g-file-hint" className="mt-1 text-xs text-muted-foreground">PDF, Word (.docx) or .txt, up to 4 MB. Google Docs: download as .docx or PDF.</p>
+            <p id="g-file-hint" className="mt-1 text-xs text-muted-foreground">PDF, Word (.docx) or .txt. Read on your device, so any size works. Google Docs: download as .docx or PDF.</p>
           </div>
 
           <div>
