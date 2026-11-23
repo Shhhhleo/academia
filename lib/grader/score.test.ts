@@ -161,13 +161,15 @@ describe("subject-aware form", () => {
     expect([...r.next_steps, ...r.criteria.flatMap((c) => c.improvements)].join(" ")).not.toMatch(/show, don't tell|Shape the story|sensory/i)
   })
 
-  it("expects science answers to be about half as long, but not lab reports", () => {
+  it("expects science and maths answers to be about half as long, but not lab reports", () => {
     const answer = "Light slows down in glass because glass is optically denser than air, so its speed drops from 3.0 × 10^8 m/s to about 2.0 × 10^8 m/s. This change in speed makes the ray bend towards the normal as it enters. ".repeat(3)
     const physics = (taskType: string, text = answer) => gradeTask(req({ subjectName: "Physics", subjectGroup: "Sciences", year: "5", taskType }), text)
     const history = gradeTask(req({ subjectName: "History", subjectGroup: "Individuals and societies", year: "5", taskType: "Summative assessment" }), answer)
     const aim = (r: ReturnType<typeof gradeTask>) => r.criteria.flatMap((c) => c.improvements).join(" ").match(/aim for roughly (\d+)/)?.[1]
     expect(aim(physics("Summative assessment"))).toBe("275")
     expect(aim(history)).toBe("550")
+    expect(aim(gradeTask(req({ subjectName: "Mathematics", subjectGroup: "Mathematics", year: "5", taskType: "Summative assessment" }), answer))).toBe("275")
+    expect(aim(gradeTask(req({ programme: "DP", subjectName: "Maths AA", subjectGroup: "Mathematics", year: "1", taskType: "Internal assessment (IA)" }), answer))).toBe("2200")
     expect(aim(physics("Lab report"))).toBe("770")
     const sum = (r: ReturnType<typeof gradeTask>) => r.criteria.reduce((a, c) => a + c.score, 0)
     expect(sum(physics("Summative assessment", answer + answer))).toBeGreaterThan(sum(physics("Lab report", answer + answer)))
