@@ -53,7 +53,11 @@ export function TaskGrader() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GradeResult | null>(null)
   const [taskType, setTaskType] = useState<TaskType>(TASK_TYPES[0])
-  const preview = subject ? builtInRubric(subject.programme, subject.subject_group ?? undefined, taskType, subject.name) : null
+  const [otherGroup, setOtherGroup] = useState("")
+  const [otherName, setOtherName] = useState("")
+  const preview = subject
+    ? builtInRubric(subject.programme, subject.subject_group ?? undefined, taskType, subject.name)
+    : builtInRubric(programme, otherGroup || undefined, taskType, otherName)
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -64,6 +68,9 @@ export function TaskGrader() {
       if (subject.subject_group) fd.set("subjectGroup", subject.subject_group)
       fd.set("level", subject.level)
     }
+    const ticked = fd.getAll("criterion").map(String)
+    fd.delete("criterion")
+    if (ticked.length) fd.set("criteria", ticked.join(","))
     setBusy(true)
     setError(null)
     setResult(null)
@@ -110,14 +117,22 @@ export function TaskGrader() {
             <div className="grid gap-3 rounded-lg border bg-surface-2/50 p-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="g-programme" className={label}>Programme</label>
-                <NativeSelect id="g-programme" name="programme" value={programme} onChange={(e) => setProgramme(e.target.value as "MYP" | "DP")}>
+                <NativeSelect
+                  id="g-programme"
+                  name="programme"
+                  value={programme}
+                  onChange={(e) => {
+                    setProgramme(e.target.value as "MYP" | "DP")
+                    setOtherGroup("")
+                  }}
+                >
                   <option value="MYP">MYP</option>
                   <option value="DP">DP</option>
                 </NativeSelect>
               </div>
               <div>
                 <label htmlFor="g-group" className={label}>Subject group</label>
-                <NativeSelect id="g-group" name="subjectGroup" key={programme}>
+                <NativeSelect id="g-group" name="subjectGroup" value={otherGroup} onChange={(e) => setOtherGroup(e.target.value)}>
                   <option value="">Work it out from the name</option>
                   {SUBJECT_GROUPS[programme].map((g) => (
                     <option key={g} value={g}>{g}</option>
@@ -126,7 +141,7 @@ export function TaskGrader() {
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="g-name" className={label}>Subject name</label>
-                <Input id="g-name" name="subjectName" required maxLength={120} placeholder="e.g. English Language and Literature" />
+                <Input id="g-name" name="subjectName" required maxLength={120} value={otherName} onChange={(e) => setOtherName(e.target.value)} placeholder="e.g. English Language and Literature" />
               </div>
               {programme === "DP" && (
                 <div>
@@ -158,6 +173,22 @@ export function TaskGrader() {
               </NativeSelect>
             </div>
           </div>
+
+          {/* key: ticks reset when the subject or task type changes the criteria. */}
+          <fieldset key={preview.label} aria-describedby="g-criteria-hint">
+            <legend className={label}>Criteria this task assesses (optional)</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {preview.criteria.map((c) => (
+                <label key={c.id} className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" name="criterion" value={c.id} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
+                  <span>
+                    <span className="font-medium">{c.id}</span> {c.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p id="g-criteria-hint" className="mt-1 text-xs text-muted-foreground">Tick only the criteria your teacher is marking. Leave all unticked to grade every criterion.</p>
+          </fieldset>
 
           <div>
             <label htmlFor="g-task" className={label}>The task or question (optional)</label>

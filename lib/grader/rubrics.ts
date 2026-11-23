@@ -294,6 +294,8 @@ export const gradeRequest = z.object({
   taskType: z.enum(TASK_TYPES),
   rubric: z.string().max(20_000).optional(),
   task: z.string().max(5_000).optional(),
+  /** Comma-separated criterion ids the task assesses, e.g. "A,C". Empty: all. */
+  criteria: z.string().max(100).optional(),
   text: z.string().max(200_000).optional(),
 })
 export type GradeRequest = z.infer<typeof gradeRequest>

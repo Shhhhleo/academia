@@ -56,6 +56,20 @@ describe("gradeTask", () => {
     expect(r.caveats).toMatch(/built-in IB criteria/)
   })
 
+  it("grades only the criteria the student ticked", () => {
+    const r = gradeTask(req({ criteria: "A,C" }), strong)
+    expect(r.criteria.map((c) => c.id)).toEqual(["A", "C"])
+    expect(r.caveats).toMatch(/Graded on criteria A, C only/)
+    // Next steps come only from the ticked criteria.
+    const onlyB = gradeTask(req({ criteria: "B" }), weak).next_steps.join(" ")
+    expect(onlyB).toMatch(/paragraphs with an introduction/)
+    expect(onlyB).not.toMatch(/Address more of what this criterion/)
+    expect(gradeTask(req({ criteria: "A,C" }), weak).next_steps.join(" ")).not.toMatch(/paragraphs with an introduction/)
+    const none = gradeTask(req({ criteria: "Z" }), strong)
+    expect(none.criteria).toHaveLength(4)
+    expect(none.caveats).toMatch(/None of the criteria you ticked/)
+  })
+
   it("checks the work answers the task that was set", () => {
     const onTask = gradeTask(req({ task: "Analyse how the poet uses imagery and symbolism to present grief." }), strong)
     const offTask = gradeTask(req({ task: "Evaluate the economic consequences of globalisation for developing countries." }), strong)
