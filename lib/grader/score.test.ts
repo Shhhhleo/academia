@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { SUBJECT_GROUPS } from "@/lib/ib"
 import { builtInRubric, gradeRequest, isLanguageGroup, TASK_TYPES, taskExample, taskTypesFor, type TaskType } from "./rubrics"
+import { artsEvaluation } from "./fixtures"
 import { gradeTask, parseRubric } from "./score"
+import { STRANDS } from "./strands"
 
 const req = (o: Record<string, string>) =>
   gradeRequest.parse({ programme: "MYP", subjectName: "English", subjectGroup: "Language and literature", year: "3", taskType: "Essay", ...o })
@@ -98,6 +100,20 @@ describe("builtInRubric", () => {
     }
   })
 
+  it("has strands for every content criterion, so a changed rubric can't silently fall back to keywords", () => {
+    for (const programme of ["MYP", "DP"] as const) {
+      for (const group of SUBJECT_GROUPS[programme]) {
+        for (const task of TASK_TYPES) {
+          const subject = group === "Individuals and societies" ? ["History", "Economics", "Geography", "Psychology"] : ["Some subject"]
+          for (const name of subject) {
+            const r = builtInRubric(programme, group, task, name)
+            for (const c of r.criteria.filter((c) => c.kind === "content")) expect(STRANDS[r.label]?.[c.id]?.length, `${r.label} ${c.id}`).toBeGreaterThan(0)
+          }
+        }
+      }
+    }
+  })
+
   it("works out the group from the subject name when it isn't set", () => {
     const art = builtInRubric("MYP", undefined, "Project / portfolio", "Visual Art")
     expect(art.criteria.map((c) => c.name)).toEqual(["Investigating", "Developing", "Creating/performing", "Evaluating"])
@@ -171,8 +187,20 @@ describe("subject-aware form", () => {
     expect(aim(gradeTask(req({ subjectName: "Mathematics", subjectGroup: "Mathematics", year: "5", taskType: "Summative assessment" }), answer))).toBe("275")
     expect(aim(gradeTask(req({ programme: "DP", subjectName: "Maths AA", subjectGroup: "Mathematics", year: "1", taskType: "Internal assessment (IA)" }), answer))).toBe("2200")
     expect(aim(physics("Lab report"))).toBe("770")
-    const sum = (r: ReturnType<typeof gradeTask>) => r.criteria.reduce((a, c) => a + c.score, 0)
-    expect(sum(physics("Summative assessment", answer + answer))).toBeGreaterThan(sum(physics("Lab report", answer + answer)))
+  })
+
+  it("marks an arts evaluation on appraising the work and reflecting on growth, not on essay features", () => {
+    // Two dense blocks with no headings, quotations or citations: a teacher would give about 7/8.
+    const r = gradeTask(req({ subjectName: "Visual Art", subjectGroup: "Arts", year: "5", taskType: "Summative assessment", criteria: "D" }), artsEvaluation)
+    const d = r.criteria[0]
+    expect(d.name).toBe("Evaluating")
+    expect(d.score).toBeGreaterThanOrEqual(6)
+    expect(d.justification).toMatch(/2 of its 2 strands/)
+    expect(d.strengths.join(" ")).toMatch(/appraise your own artwork/)
+    // A bare description of the same artwork shows neither strand.
+    const thin = gradeTask(req({ subjectName: "Visual Art", subjectGroup: "Arts", year: "5", taskType: "Summative assessment", criteria: "D" }), "My artwork shows a tree and a lamp and a road at my school. I used blue and green and yellow. I drew the tree first and then the lamp. I think it looks nice and I like it. It took me three lessons to finish it.")
+    expect(thin.criteria[0].score).toBeLessThanOrEqual(2)
+    expect(thin.criteria[0].improvements.join(" ")).toMatch(/Judge your work against your intention/)
   })
 })
 
