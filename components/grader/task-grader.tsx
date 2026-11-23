@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useState, type FormEvent, type ReactNode } from "react"
 import { FileUp, Loader2, Sparkles } from "lucide-react"
 import { useShell } from "@/components/app/shell-context"
 import { Panel } from "@/components/app/page-header"
@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
+import { AiFeedback } from "@/components/grader/ai-feedback"
+import { matchTask } from "@/lib/grader/ai/client"
+import type { FeedbackInput } from "@/lib/grader/ai/prompt"
 import { builtInRubric, TASK_TYPES, WRITING_MODES, type GradeResult, type TaskType } from "@/lib/grader/rubrics"
 import { SUBJECT_GROUPS } from "@/lib/ib"
 
@@ -52,6 +55,8 @@ export function TaskGrader() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GradeResult | null>(null)
+  const [feedback, setFeedback] = useState<FeedbackInput | null>(null)
+  const [gradeNo, setGradeNo] = useState(0)
   const [taskType, setTaskType] = useState<TaskType>(TASK_TYPES[0])
   const [otherGroup, setOtherGroup] = useState("")
   const [otherName, setOtherName] = useState("")
@@ -86,10 +91,35 @@ export function TaskGrader() {
         // shortcut: grades the first 200k characters (schema cap); raise both if longer work must be graded.
         fd.set("text", `${read}\n\n${pasted}`.slice(0, MAX_TEXT))
       }
+      const task = String(fd.get("task") ?? "")
+      const work = String(fd.get("text") ?? "")
+      // Meaning match on this device (small open-source model); without it the grader matches the task's words.
+      if (task.trim() && work.trim()) {
+        const match = await matchTask(task, work)
+        if (match !== null) fd.set("taskMatch", match.toFixed(3))
+      }
       const res = await fetch("/api/grader", { method: "POST", body: fd })
       const json = await res.json().catch(() => null)
       if (!res.ok) setError(json?.error ?? "Something went wrong while grading. Try again.")
-      else setResult(json as GradeResult)
+      else {
+        const graded = json as GradeResult
+        setResult(graded)
+        setFeedback(
+          work.trim().split(/\s+/).length >= 20
+            ? {
+                programme: String(fd.get("programme")) === "DP" ? "DP" : "MYP",
+                year: Number(fd.get("year")) || 1,
+                subjectName: String(fd.get("subjectName") ?? ""),
+                taskType: String(fd.get("taskType") ?? ""),
+                mode: graded.mode,
+                task,
+                criteria: graded.criteria.map(({ id, name, score, max }) => ({ id, name, score, max })),
+                text: work,
+              }
+            : null,
+        )
+        setGradeNo((n) => n + 1)
+      }
     } catch (err) {
       setError(err instanceof UserError ? err.message : "Couldn't reach the grader. Check your connection and try again.")
     } finally {
@@ -203,7 +233,7 @@ export function TaskGrader() {
           <div>
             <label htmlFor="g-task" className={label}>The task or question (optional)</label>
             <Textarea id="g-task" name="task" rows={3} maxLength={5_000} aria-describedby="g-task-hint" placeholder="e.g. Analyse how the poet uses imagery to present grief." />
-            <p id="g-task-hint" className="mt-1 text-xs text-muted-foreground">Paste the question or instructions your teacher set, so the grade checks you answered that task.</p>
+            <p id="g-task-hint" className="mt-1 text-xs text-muted-foreground">Paste the question or instructions your teacher set, so the grade checks you answered that task. A small open-source model on your device compares their meaning (about 45 MB the first time).</p>
           </div>
 
           <div>
@@ -232,7 +262,7 @@ export function TaskGrader() {
 
       <div className="lg:col-span-3" aria-live="polite">
         {result ? (
-          <Evaluation result={result} />
+          <Evaluation result={result} feedback={feedback && <AiFeedback key={gradeNo} input={feedback} />} />
         ) : (
           <Panel>
             <div className="grid place-items-center gap-2 py-16 text-center text-sm text-muted-foreground">
@@ -263,7 +293,7 @@ function List({ title, items }: { title: string; items: string[] }) {
   )
 }
 
-function Evaluation({ result }: { result: GradeResult }) {
+function Evaluation({ result, feedback }: { result: GradeResult; feedback: ReactNode }) {
   return (
     <div className="grid gap-4">
       <Panel title="Estimated grade">
@@ -272,6 +302,8 @@ function Evaluation({ result }: { result: GradeResult }) {
           <p className="text-sm">{result.summary}</p>
         </div>
       </Panel>
+
+      {feedback}
 
       {result.criteria.map((c) => (
         <Panel key={c.id} title={`Criterion ${c.id}: ${c.name}`} action={<span className="font-mono text-lg font-semibold tabular">{c.score}<span className="text-sm text-muted-foreground">/{c.max}</span></span>}>
