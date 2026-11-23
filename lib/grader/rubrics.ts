@@ -213,7 +213,7 @@ export function builtInRubric(
   subjectGroup: string | undefined,
   taskType: TaskType,
   subjectName?: string,
-): { label: string; criteria: RubricCriterion[]; notes: string[] } {
+): { label: string; criteria: RubricCriterion[]; notes: string[]; group: string } {
   const resolved = resolveGroup(programme, subjectGroup, subjectName)
   const fallback = programme === "MYP" ? "Language and literature" : "Studies in language and literature"
   const group = resolved?.group ?? fallback
@@ -222,7 +222,7 @@ export function builtInRubric(
     : resolved.inferred
       ? [`The subject group isn't set, so ${group} was worked out from the subject name. Set it in My Subjects if that's wrong.`]
       : []
-  const pick = (label: string, criteria: RubricCriterion[], note?: string) => ({ label, criteria, notes: note ? [...notes, note] : notes })
+  const pick = (label: string, criteria: RubricCriterion[], note?: string) => ({ label, criteria, notes: note ? [...notes, note] : notes, group })
   const ownRubric = "paste its rubric into \"Your own rubric\" to grade against the exact criteria."
 
   if (programme === "MYP") return pick(`MYP ${group} criteria`, MYP_RUBRICS[group])
@@ -268,6 +268,41 @@ export const TASK_TYPES = [
   "Other",
 ] as const
 export type TaskType = (typeof TASK_TYPES)[number]
+
+const LANGUAGE_GROUPS = new Set(["Language and literature", "Language acquisition", "Studies in language and literature"])
+/** Language subjects are the only ones marked by type of writing; other subjects have their own criteria for that. */
+export const isLanguageGroup = (group: string | undefined) => !!group && LANGUAGE_GROUPS.has(group)
+
+/** Task types that exist for this programme and subject group (no lab reports in English, no IA in the MYP). */
+export function taskTypesFor(programme: "MYP" | "DP", group: string | undefined): TaskType[] {
+  if (programme === "DP" && group === "Core (TOK / EE)") return ["Extended essay", "TOK essay", "Other"]
+  if (programme === "MYP" && group === "Personal project") return ["Project / portfolio", "Other"]
+  return TASK_TYPES.filter((t) => {
+    if (t === "Lab report") return group === "Sciences"
+    if (t === "TOK essay") return false
+    if (t === "Internal assessment (IA)" || t === "Extended essay") return programme === "DP"
+    return true
+  })
+}
+
+/** An example task for the subject group, shown as the task box's placeholder. */
+export function taskExample(group: string | undefined): string {
+  const examples: Record<string, string> = {
+    "Language and literature": "Analyse how the poet uses imagery to present grief.",
+    "Studies in language and literature": "Compare how two works you have studied present power.",
+    "Language acquisition": "Write a blog post for teenagers about a festival in your town.",
+    "Individuals and societies": "To what extent was the Treaty of Versailles a cause of the Second World War?",
+    Sciences: "Investigate how temperature affects the rate of reaction between magnesium and acid.",
+    Mathematics: "Find the pattern in the number of tiles at each step, and prove your rule.",
+    Arts: "Explain how your final piece responds to the theme of identity.",
+    "The arts": "Explain how your final piece responds to the theme of identity.",
+    "Physical and health education": "Design and evaluate a six-week plan to improve your endurance.",
+    Design: "Design a product that helps students organise their revision.",
+    "Personal project": "Report on how you achieved your learning goal and product.",
+    "Core (TOK / EE)": "Is knowledge in the natural sciences more reliable than in the arts?",
+  }
+  return (group && examples[group]) || "Paste the question or instructions your teacher set."
+}
 
 /** Types of writing the grader marks by their own craft. */
 export const WRITING_MODES = {

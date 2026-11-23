@@ -1,6 +1,6 @@
 import { DEFAULT_DP_BOUNDARIES, mypGradeFromTotal, percentToGrade } from "@/lib/grades"
 import { coverageFromMatch } from "./ai/meaning"
-import { builtInRubric, EXPECTED_WORDS, type CriterionResult, type GradeRequest, type GradeResult, type Kind, type Mode, type RubricCriterion } from "./rubrics"
+import { builtInRubric, EXPECTED_WORDS, isLanguageGroup, type CriterionResult, type GradeRequest, type GradeResult, type Kind, type Mode, type RubricCriterion } from "./rubrics"
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 const count = (text: string, re: RegExp) => text.match(re)?.length ?? 0
@@ -297,17 +297,22 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   if (label === "MYP Language acquisition criteria") caveats.push("Listening and speaking are normally assessed from audio; written work only gives a rough indication for those criteria.")
 
   const signals = analyse(text, expected)
-  // Only language subjects guess the type of writing from the work; elsewhere a history recount isn't a story.
-  const languageRubric = /^(?:MYP|DP) Language/.test(label)
-  const detected = input.mode ? { mode: input.mode, from: "chosen" as const } : detectMode(input.task, input.taskType, languageRubric ? text : "")
+  // Types of writing apply to language subjects only: a physics report is marked on the physics criteria, never as a story.
+  const languageSubject = isLanguageGroup(builtIn.group)
+  const languageRubric = languageSubject && !custom.length
+  const detected: { mode: Mode; from: "chosen" | "task" | "type" | "work" } = !languageSubject
+    ? { mode: input.taskType === "Lab report" ? "informative" : "analytical", from: "type" }
+    : input.mode
+      ? { mode: input.mode, from: "chosen" }
+      : detectMode(input.task, input.taskType, text)
   const mode = detected.mode
   const judgeByType = languageRubric && mode !== "analytical"
   // Description: asked for, or vivid writing with no dialogue or plot moving it along.
   const descriptive = mode === "narrative" && (/describ/i.test(input.task ?? "") || (signals.dialogue === 0 && signals.timeFlow <= 0.5 && signals.sensory >= 0.6))
-  if (detected.from === "work" && languageRubric) {
+  if (detected.from === "work") {
     caveats.push(`I worked out from your writing that this is ${MODE_NAME[mode]}. If that's wrong, choose the type of writing and grade again.`)
   }
-  const modeLine = languageRubric || detected.from !== "work" ? ` Marked as ${MODE_NAME[mode]}.` : ""
+  const modeLine = languageSubject ? ` Marked as ${MODE_NAME[mode]}.` : ""
   // A story shows its theme rather than naming it ("show, don't tell"), so its task words aren't checked literally.
   const taskTerms = input.task?.trim() && mode !== "narrative" ? keywordsFrom(input.task, 20).filter((k) => !COMMAND_TERMS.has(k)).slice(0, 10) : []
   const taskWords = input.task?.toLowerCase().match(/[a-z]{5,}/g) ?? []
