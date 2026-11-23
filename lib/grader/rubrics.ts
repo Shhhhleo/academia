@@ -4,6 +4,16 @@ import { SUBJECT_GROUPS } from "@/lib/ib"
 /** How a criterion is judged: by the ideas it rewards, by structure, or by language quality. */
 export type Kind = "content" | "organisation" | "language"
 
+/** One strand of a criterion: what the student should do, how to improve it, and the cues that show it in the work (see strands.ts). */
+export interface Strand {
+  does: string
+  tip: string
+  cues: string
+  /** How many different cues make the strand fully shown. */
+  need: number
+  weight: number
+}
+
 export interface RubricCriterion {
   id: string
   name: string
@@ -11,6 +21,8 @@ export interface RubricCriterion {
   kind: Kind
   /** Lower-case word stems or phrases the criterion rewards. */
   keywords: string[]
+  /** The criterion's strands, attached on the server for built-in rubrics. */
+  strands?: Strand[]
 }
 
 const c = (id: string, name: string, kind: Kind, keywords = "", max = 8): RubricCriterion => ({

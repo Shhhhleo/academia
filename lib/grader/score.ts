@@ -1,6 +1,7 @@
 import { DEFAULT_DP_BOUNDARIES, mypGradeFromTotal, percentToGrade } from "@/lib/grades"
 import { coverageFromMatch } from "./ai/meaning"
 import { builtInRubric, EXPECTED_WORDS, isLanguageGroup, type CriterionResult, type GradeRequest, type GradeResult, type Kind, type Mode, type RubricCriterion } from "./rubrics"
+import { STRANDS, strandScore, TUNE } from "./strands"
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 const count = (text: string, re: RegExp) => text.match(re)?.length ?? 0
@@ -80,6 +81,7 @@ export function analyse(text: string, expectedWords: number) {
     persuasion:
       (clamp(count(text, /\?/g) / 2) + clamp((count(text, ADDRESS) / Math.max(1, n)) * 25) + clamp(count(text, MODALS) / 3) + (count(text, COUNTER) > 0 ? 1 : 0)) / 4,
     literary: count(text, LITERARY),
+    text,
     lower,
     tokens: new Set(words),
   }
@@ -153,20 +155,43 @@ function scoreCriterion(
     : c.keywords.length
       ? clamp(found.length / Math.min(c.keywords.length, 6))
       : structure
-  const raw: Record<Kind, number> = {
-    content: 0.45 * kw + 0.2 * support + 0.25 * depth + 0.1 * structure,
-    organisation: 0.5 * structure + 0.2 * kw + 0.15 * support + 0.15 * language,
-    language: 0.7 * language + 0.3 * structure,
-  }
+  // Built-in rubrics are marked strand by strand. A story or speech in a language subject is judged by its craft instead.
+  const parts = judgeByType || c.kind === "language" ? [] : (c.strands ?? []).map((strand) => ({ strand, score: strandScore(strand, s.text, s.words) }))
+  const coverage = parts.length ? parts.reduce((a, p) => a + p.score * p.strand.weight, 0) / parts.reduce((a, p) => a + p.strand.weight, 0) : 0
+  // How far points are developed: reasons given, and specifics such as examples, figures and quotations.
+  const reasoned = 0.65 * depth + 0.35 * support
+  const developed = (1 - TUNE.langShare) * reasoned + TUNE.langShare * language
+  const raw: Record<Kind, number> = parts.length
+    ? {
+        content: coverage ** TUNE.power * (TUNE.devFloor + (1 - TUNE.devFloor) * developed),
+        organisation: 0.45 * coverage + 0.35 * structure + 0.2 * language,
+        language: 0.7 * language + 0.3 * structure,
+      }
+    : {
+        content: 0.45 * kw + 0.2 * support + 0.25 * depth + 0.1 * structure,
+        organisation: 0.5 * structure + 0.2 * kw + 0.15 * support + 0.15 * language,
+        language: 0.7 * language + 0.3 * structure,
+      }
   // Short work can't show a criterion fully, however good the sentences are.
-  const fraction = s.words < 20 ? 0 : clamp(raw[c.kind] * (0.35 + 0.65 * s.length) * (c.kind === "content" ? taskFit : 1))
+  const fraction = s.words < 20 ? 0 : clamp((TUNE.gain * raw[c.kind] - TUNE.offset) * (TUNE.lengthFloor + (1 - TUNE.lengthFloor) * Math.min(1, s.length / TUNE.lengthFull)) * (c.kind === "content" ? taskFit : 1))
   const score = Math.round(fraction * c.max)
   // Quarters of the scale, matching MYP bands: 1–2 limited, 3–4 adequate, 5–6 substantial, 7–8 excellent.
   const level = LEVEL[Math.min(3, Math.max(0, Math.ceil((score / c.max) * 4) - 1))]
 
   const strengths: string[] = []
   const improvements: string[] = []
-  if (c.kind === "content") {
+  const byScore = [...parts].sort((a, b) => a.score - b.score)
+  if (parts.length) {
+    for (const p of byScore.filter((p) => p.score >= 0.7).reverse().slice(0, 2)) strengths.push(`You ${p.strand.does}.`)
+    for (const p of byScore.filter((p) => p.score < 0.6).slice(0, 3)) improvements.push(p.strand.tip)
+    if (c.kind === "content" && reasoned < 0.45) improvements.push("Develop each point: give a reason (\"because…\", \"this means…\") and a specific example or figure.")
+    // Every strand is there but the mark isn't full: say what the top band still needs.
+    if (!improvements.length && score < c.max) {
+      improvements.push(`To reach the top band, go further on this: ${byScore[0].strand.tip}`)
+      if (c.kind === "content" && language < 0.75) improvements.push("Explain each point in more precise detail: use exact subject terms and fuller, more varied sentences.")
+    }
+    if (c.kind === "organisation" && structure < 0.6) improvements.push("Organise the work into clear paragraphs or sections, with an introduction and a conclusion.")
+  } else if (c.kind === "content") {
     if (!judgeByType) {
       if (found.length >= 3) strengths.push(`You cover key ideas this criterion rewards (${found.slice(0, 4).join(", ")}).`)
       else if (missing.length) improvements.push(`Address more of what this criterion looks for, e.g. ${missing.slice(0, 4).join(", ")}.`)
@@ -220,8 +245,12 @@ function scoreCriterion(
 
   const band = mypBands ? (score === 0 ? "0" : `${Math.ceil(score / 2) * 2 - 1}–${Math.ceil(score / 2) * 2}`) : level[0].toUpperCase() + level.slice(1)
   const name = c.name.toLowerCase()
-  const justification =
-    c.kind === "content" && story && descriptive
+  const shown = parts.filter((p) => p.score >= 0.7).length
+  const justification = parts.length
+    ? parts.length === 1
+      ? `Shows ${level} ${name}, judged on how clearly you ${parts[0].strand.does}.`
+      : `Shows ${level} ${name}: ${shown} of its ${parts.length} strands come through clearly${byScore[0].score < 0.6 ? `; least shown: "${byScore[0].strand.does}"` : ""}.`
+    : c.kind === "content" && story && descriptive
       ? `Shows ${level} ${name}: ${s.sensory >= 0.5 ? "vivid" : "little"} sensory detail and ${s.figurative >= 0.5 ? "strong" : "little"} figurative language.`
       : c.kind === "content" && story
       ? `Shows ${level} ${name}: ${s.sensory >= 0.5 ? "vivid" : "little"} sensory detail and imagery, and ${support >= 0.5 ? "a clear" : "little"} sense of movement through dialogue and time.`
@@ -267,9 +296,10 @@ function keywordsFrom(text: string, limit: number) {
 
 export function gradeTask(input: GradeRequest, text: string): GradeResult {
   const isMyp = input.programme === "MYP"
-  const base = EXPECTED_WORDS[input.taskType]
-  const fixedLength = ["Internal assessment (IA)", "Extended essay", "TOK essay"].includes(input.taskType)
   const builtIn = builtInRubric(input.programme, input.subjectGroup, input.taskType, input.subjectName)
+  // An Economics IA commentary is capped at 800 words; other IAs run to a couple of thousand.
+  const base = builtIn.label.startsWith("DP Economics IA") ? 750 : EXPECTED_WORDS[input.taskType]
+  const fixedLength = ["Internal assessment (IA)", "Extended essay", "TOK essay"].includes(input.taskType)
   // Science and maths answers are concise (and their numbers and equations aren't counted as words), so they're expected to run about half as long.
   const concise = (builtIn.group === "Sciences" || builtIn.group === "Mathematics") && !fixedLength && input.taskType !== "Lab report" ? 0.5 : 1
   const expected = Math.round(fixedLength ? base : base * (isMyp ? 0.6 + 0.1 * input.year : 1.2) * concise)
@@ -296,7 +326,13 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
       criteria = only
     } else caveats.push("None of the criteria you ticked are in this rubric, so every criterion was graded.")
   }
-  if (label === "MYP Language acquisition criteria") caveats.push("Listening and speaking are normally assessed from audio; written work only gives a rough indication for those criteria.")
+  if (!custom.length) {
+    criteria = criteria.map((cr) => ({ ...cr, strands: STRANDS[label]?.[cr.id] }))
+    const unseen = criteria.filter((cr) => /^(Listening|Speaking|Creating\/performing|Creating and presenting|Applying and performing|Interactive skills)$/.test(cr.name) || label.includes("oral"))
+    if (unseen.length) {
+      caveats.push(`${unseen.map((cr) => cr.name).join(", ")}: normally assessed from the recording, performance or artwork itself, so written work only gives a rough indication.`)
+    }
+  }
 
   const signals = analyse(text, expected)
   // Types of writing apply to language subjects only: a physics report is marked on the physics criteria, never as a story.
@@ -308,7 +344,8 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
       ? { mode: input.mode, from: "chosen" }
       : detectMode(input.task, input.taskType, text)
   const mode = detected.mode
-  const judgeByType = languageRubric && mode !== "analytical"
+  // Language acquisition and Language B criteria describe any text type, so they keep their strands.
+  const judgeByType = languageRubric && mode !== "analytical" && !/Language (?:acquisition|B)/.test(builtIn.label)
   // Description: asked for, or vivid writing with no dialogue or plot moving it along.
   const descriptive = mode === "narrative" && (/describ/i.test(input.task ?? "") || (signals.dialogue === 0 && signals.timeFlow <= 0.5 && signals.sensory >= 0.6))
   if (detected.from === "work") {
@@ -352,7 +389,11 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   const summary =
     signals.words < 20
       ? "There isn't enough text to grade. Upload the full piece of work or paste it in."
-      : `${signals.words} words graded against ${label}. Strongest: ${ranked.at(-1)!.name} (${ranked.at(-1)!.score}/${ranked.at(-1)!.max}). Most room to improve: ${ranked[0].name} (${ranked[0].score}/${ranked[0].max}).${modeLine}${taskLine}`
+      : `${signals.words} words graded against ${label}. ${
+          ranked.length === 1
+            ? `${ranked[0].name}: ${ranked[0].score}/${ranked[0].max}.`
+            : `Strongest: ${ranked.at(-1)!.name} (${ranked.at(-1)!.score}/${ranked.at(-1)!.max}). Most room to improve: ${ranked[0].name} (${ranked[0].score}/${ranked[0].max}).`
+        }${modeLine}${taskLine}`
 
   return {
     overall_grade: overall,
