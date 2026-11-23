@@ -3,7 +3,7 @@ import { gradeRequest } from "../rubrics"
 import { narrativeStrong, narrativeWeak } from "../fixtures"
 import { gradeTask } from "../score"
 import { chunkText, cosine, coverageFromMatch } from "./meaning"
-import { buildFeedbackMessages, feedbackTokens } from "./prompt"
+import { buildFeedbackMessages, feedbackTokens, parseFeedback } from "./prompt"
 
 const req = (o: Record<string, string>) =>
   gradeRequest.parse({ programme: "MYP", subjectName: "English", subjectGroup: "Language and literature", year: "3", taskType: "Practice worksheet", ...o })
@@ -85,6 +85,28 @@ describe("on-device feedback prompt", () => {
     expect(user.content).toContain("Criterion C (Producing text): estimated 8/8")
     expect(user.content).toContain("Criterion D (Using language)\nStrength: …\nImprove: …")
     expect(user.content).toContain("The bell had already rung")
+  })
+
+  it("reads the model's answer into a card per criterion and a next step", () => {
+    const answer = `**Criterion C (Producing text)**
+Strength: Vivid imagery, such as "her heart pounding like a drum".
+Improve: Show Maya's fear through action
+instead of naming it.
+
+Criterion D (Using language)
+Strength: Clear sentences.
+Improve: Vary sentence openings.
+
+Next step: Rewrite the opening with a sound.`
+    expect(parseFeedback(answer)).toEqual({
+      blocks: [
+        { title: "Criterion C (Producing text)", strength: 'Vivid imagery, such as "her heart pounding like a drum".', improve: "Show Maya's fear through action instead of naming it." },
+        { title: "Criterion D (Using language)", strength: "Clear sentences.", improve: "Vary sentence openings." },
+      ],
+      next: "Rewrite the opening with a sound.",
+    })
+    // Anything outside the layout is shown as plain text instead.
+    expect(parseFeedback("Here is some feedback about your story.")).toBeNull()
   })
 
   it("cuts very long work and sizes the answer to the criteria", () => {

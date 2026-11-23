@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { SUBJECT_GROUPS } from "@/lib/ib"
-import { builtInRubric, gradeRequest, TASK_TYPES, type TaskType } from "./rubrics"
+import { builtInRubric, gradeRequest, isLanguageGroup, TASK_TYPES, taskExample, taskTypesFor, type TaskType } from "./rubrics"
 import { gradeTask, parseRubric } from "./score"
 
 const req = (o: Record<string, string>) =>
@@ -130,6 +130,35 @@ describe("builtInRubric", () => {
     expect(r.criteria.map((c) => c.name)).toEqual(["Investigating", "Developing", "Creating/performing", "Evaluating"])
     expect(r.summary).toContain("MYP Arts criteria")
     expect(r.caveats).toMatch(/worked out from the subject name/)
+  })
+})
+
+describe("subject-aware form", () => {
+  it("offers only task types that exist for the programme and subject", () => {
+    expect(taskTypesFor("MYP", "Sciences")).toContain("Lab report")
+    expect(taskTypesFor("MYP", "Language and literature")).not.toContain("Lab report")
+    for (const t of ["Internal assessment (IA)", "Extended essay", "TOK essay"] as const) expect(taskTypesFor("MYP", "Sciences")).not.toContain(t)
+    expect(taskTypesFor("DP", "Sciences")).toEqual(expect.arrayContaining(["Lab report", "Internal assessment (IA)", "Extended essay"]))
+    expect(taskTypesFor("DP", "Core (TOK / EE)")).toEqual(["Extended essay", "TOK essay", "Other"])
+    expect(taskTypesFor("MYP", "Personal project")).toEqual(["Project / portfolio", "Other"])
+    for (const programme of ["MYP", "DP"] as const) for (const g of SUBJECT_GROUPS[programme]) expect(taskTypesFor(programme, g).length).toBeGreaterThan(0)
+  })
+
+  it("asks for the type of writing in language subjects only", () => {
+    expect(isLanguageGroup("Language and literature")).toBe(true)
+    expect(isLanguageGroup("Studies in language and literature")).toBe(true)
+    expect(isLanguageGroup("Language acquisition")).toBe(true)
+    expect(isLanguageGroup("Sciences")).toBe(false)
+    expect(taskExample("Sciences")).toMatch(/rate of reaction/)
+  })
+
+  it("marks physics on the physics criteria, never as a type of writing", () => {
+    const story = "The photon raced through the vacuum. Suddenly it hit the glass and slowed down, bending towards the normal. It felt the cold, dense medium. Moments later it escaped into the air and sped up again, bending away from the normal."
+    const r = gradeTask(req({ subjectName: "Physics", subjectGroup: "Sciences", year: "5", taskType: "Summative assessment", mode: "narrative", task: "Write a story about a photon travelling through glass." }), story)
+    expect(r.criteria.map((c) => c.name)).toEqual(["Knowing and understanding", "Inquiring and designing", "Processing and evaluating", "Reflecting on the impacts of science"])
+    expect(r.mode).toBe("analytical")
+    expect(r.summary).not.toMatch(/Marked as/)
+    expect([...r.next_steps, ...r.criteria.flatMap((c) => c.improvements)].join(" ")).not.toMatch(/show, don't tell|Shape the story|sensory/i)
   })
 })
 

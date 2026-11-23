@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Cpu, Loader2 } from "lucide-react"
+import { Cpu, Loader2, Target, ThumbsUp, TrendingUp, type LucideIcon } from "lucide-react"
 import { Panel } from "@/components/app/page-header"
 import { Button } from "@/components/ui/button"
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress"
 import { deviceSupport, generateFeedback, type Support } from "@/lib/grader/ai/client"
-import { buildFeedbackMessages, feedbackTokens, type FeedbackInput } from "@/lib/grader/ai/prompt"
+import { buildFeedbackMessages, feedbackTokens, parseFeedback, type FeedbackInput } from "@/lib/grader/ai/prompt"
 import { CHAT_MODEL_MB } from "@/lib/grader/ai/protocol"
 
 // Per-device choice: the model download is large, so it only happens after the student opts in.
@@ -38,6 +38,46 @@ function friendly(message: string) {
   if (/memory|alloc|device (was )?lost|OOM/i.test(message)) return "The on-device AI ran out of memory on this device. Close other tabs and try again; the grade above still stands."
   if (/fetch|network|load/i.test(message)) return "The AI model couldn't be downloaded. Check your connection and grade again; the grade above still stands."
   return "The on-device AI couldn't run on this device. The grade above still stands."
+}
+
+function Row({ icon: Icon, tone, term, text }: { icon: LucideIcon; tone: string; term: string; text: string }) {
+  return (
+    <div className="flex gap-2.5">
+      <Icon className={`mt-0.5 size-4 shrink-0 ${tone}`} aria-hidden="true" />
+      <div>
+        <dt className="font-medium">{term}</dt>
+        <dd>{text}</dd>
+      </div>
+    </div>
+  )
+}
+
+/** The model's answer as a card per criterion, or as plain text while it doesn't follow the layout. */
+function FeedbackText({ text }: { text: string }) {
+  const parsed = parseFeedback(text)
+  if (!parsed) return <div className="text-sm leading-relaxed whitespace-pre-wrap">{text.trim()}</div>
+  return (
+    <div className="grid gap-3">
+      {parsed.blocks.map((b, i) => (
+        <div key={i} className="rounded-lg border p-3">
+          {b.title && <p className="mb-2.5 text-sm font-semibold">{b.title}</p>}
+          <dl className="grid gap-2.5 text-sm leading-relaxed">
+            {b.strength && <Row icon={ThumbsUp} tone="text-success-text" term="Strength" text={b.strength} />}
+            {b.improve && <Row icon={TrendingUp} tone="text-primary" term="Improve" text={b.improve} />}
+          </dl>
+        </div>
+      ))}
+      {parsed.next && (
+        <p className="flex gap-2.5 rounded-lg bg-primary/10 p-3 text-sm leading-relaxed">
+          <Target className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+          <span>
+            <span className="font-semibold">Next step: </span>
+            {parsed.next}
+          </span>
+        </p>
+      )}
+    </div>
+  )
 }
 
 /** Feedback written about this piece by an open-source model running in the browser. Mounted once per grade. */
@@ -126,7 +166,7 @@ export function AiFeedback({ input }: { input: FeedbackInput }) {
               Reading your work…
             </p>
           )}
-          {text && <div className="text-sm leading-relaxed whitespace-pre-wrap">{text.trim()}</div>}
+          {text && <FeedbackText text={text} />}
           {phase.kind === "error" && (
             <p role="alert" className="text-sm text-destructive">
               {phase.message}

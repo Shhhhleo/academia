@@ -55,5 +55,43 @@ Next step: …`,
   ]
 }
 
+export interface ParsedFeedback {
+  blocks: { title: string; strength: string; improve: string }[]
+  next: string
+}
+
+/**
+ * Splits the model's answer (the layout asked for above) into a block per criterion and the next step.
+ * Null when it wrote something else, so the page can show the text as it is.
+ */
+export function parseFeedback(text: string): ParsedFeedback | null {
+  const blocks: ParsedFeedback["blocks"] = []
+  let next = ""
+  let field: "strength" | "improve" | "next" | null = null
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\*\*/g, "").replace(/^#+\s*/, "").trim()
+    if (!line) continue
+    if (/^Criterion\s+[A-Z]\d?\b/i.test(line)) {
+      blocks.push({ title: line.replace(/:$/, ""), strength: "", improve: "" })
+      field = null
+      continue
+    }
+    const labelled = line.match(/^[-•*]?\s*(Strength|Improve(?:ment)?|Next step)s?\s*:\s*(.*)$/i)
+    if (labelled) {
+      field = /^next/i.test(labelled[1]) ? "next" : /^strength/i.test(labelled[1]) ? "strength" : "improve"
+      if (field === "next") next = labelled[2]
+      else {
+        if (!blocks.length) blocks.push({ title: "", strength: "", improve: "" })
+        blocks[blocks.length - 1][field] = labelled[2]
+      }
+      continue
+    }
+    if (field === "next") next += ` ${line}`
+    else if (field && blocks.length) blocks[blocks.length - 1][field] += ` ${line}`
+    else return null
+  }
+  return blocks.length || next ? { blocks, next } : null
+}
+
 /** Enough room for two lines per criterion plus the next step, without letting a small model ramble. */
 export const feedbackTokens = (criteria: number) => Math.min(600, 110 * criteria + 70)
