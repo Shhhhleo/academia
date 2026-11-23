@@ -269,10 +269,12 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   const isMyp = input.programme === "MYP"
   const base = EXPECTED_WORDS[input.taskType]
   const fixedLength = ["Internal assessment (IA)", "Extended essay", "TOK essay"].includes(input.taskType)
-  const expected = Math.round(fixedLength ? base : base * (isMyp ? 0.6 + 0.1 * input.year : 1.2))
+  const builtIn = builtInRubric(input.programme, input.subjectGroup, input.taskType, input.subjectName)
+  // Science answers are concise (and their numbers and equations aren't counted as words), so they're expected to run about half as long.
+  const concise = builtIn.group === "Sciences" && !fixedLength && input.taskType !== "Lab report" ? 0.5 : 1
+  const expected = Math.round(fixedLength ? base : base * (isMyp ? 0.6 + 0.1 * input.year : 1.2) * concise)
 
   const caveats = ["This is an automatic estimate: it checks your work for what the rubric rewards (key ideas, evidence, explanation, structure and language), but it can't judge whether your ideas are correct. Use it as a guide before your teacher marks it."]
-  const builtIn = builtInRubric(input.programme, input.subjectGroup, input.taskType, input.subjectName)
   let { label, criteria } = builtIn
   const custom = input.rubric?.trim() ? parseRubric(input.rubric, isMyp ? 8 : 10) : []
   if (custom.length) {
