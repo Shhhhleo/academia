@@ -9,6 +9,7 @@ import { GradeNumber } from "@/components/grades/grade-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
+import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { AiFeedback } from "@/components/grader/ai-feedback"
 import { matchTask } from "@/lib/grader/ai/client"
@@ -73,6 +74,7 @@ export function TaskGrader() {
   const [programme, setProgramme] = useState<"MYP" | "DP">(profile.programme)
   const prog = subject?.programme ?? programme
   const [stage, setStage] = useState<Stage | null>(null)
+  const [steps, setSteps] = useState<Stage[]>([])
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GradeResult | null>(null)
   const [feedback, setFeedback] = useState<FeedbackInput | null>(null)
@@ -135,7 +137,9 @@ export function TaskGrader() {
     try {
       const file = fd.get("file")
       fd.delete("file")
-      if (file instanceof File && file.size > 0) {
+      const hasFile = file instanceof File && file.size > 0
+      setSteps([...(hasFile ? (["reading"] as const) : []), ...(String(fd.get("task") ?? "").trim() ? (["matching"] as const) : []), "grading"])
+      if (hasFile) {
         setStage("reading")
         const read = await fileText(file)
         const pasted = String(fd.get("text") ?? "")
@@ -418,6 +422,15 @@ export function TaskGrader() {
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}
               {stage ? STAGE_TEXT[stage] : "Grade my task"}
             </Button>
+            {stage && (
+              // Each step is shown half done: how long a step takes isn't known.
+              <Progress value={Math.round(((steps.indexOf(stage) + 0.5) / steps.length) * 100)}>
+                <ProgressLabel>{STAGE_TEXT[stage]}</ProgressLabel>
+                <span className="ml-auto text-sm text-muted-foreground tabular-nums">
+                  Step {steps.indexOf(stage) + 1} of {steps.length}
+                </span>
+              </Progress>
+            )}
             <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
               <Lock className="size-3" aria-hidden="true" />
               Your work is read on your device and never saved.
