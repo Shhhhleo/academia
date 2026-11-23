@@ -147,6 +147,14 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
       caveats.push("Your rubric had no criteria lines (like \"Criterion A: Analysing (0–8)\"), so the built-in IB criteria were used, with your task sheet's key terms added.")
     }
   }
+  const picked = input.criteria?.split(",").map((s) => s.trim()).filter(Boolean) ?? []
+  if (picked.length) {
+    const only = criteria.filter((cr) => picked.includes(cr.id))
+    if (only.length) {
+      if (only.length < criteria.length) caveats.push(`Graded on criteria ${only.map((cr) => cr.id).join(", ")} only, as you selected; the 1–7 grade is estimated from those criteria.`)
+      criteria = only
+    } else caveats.push("None of the criteria you ticked are in this rubric, so every criterion was graded.")
+  }
   if (label === "MYP Language acquisition criteria") caveats.push("Listening and speaking are normally assessed from audio; written work only gives a rough indication for those criteria.")
 
   const signals = analyse(text, expected)
