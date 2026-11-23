@@ -1,5 +1,5 @@
 import { DEFAULT_DP_BOUNDARIES, mypGradeFromTotal, percentToGrade } from "@/lib/grades"
-import { builtInRubric, EXPECTED_WORDS, type CriterionResult, type GradeRequest, type GradeResult, type Kind, type RubricCriterion } from "./rubrics"
+import { builtInRubric, EXPECTED_WORDS, type CriterionResult, type GradeRequest, type GradeResult, type Kind, type Mode, type RubricCriterion } from "./rubrics"
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 const count = (text: string, re: RegExp) => text.match(re)?.length ?? 0
@@ -9,8 +9,27 @@ const TRANSITIONS = phrases("firstly|secondly|furthermore|moreover|in addition|a
 const CONNECTIVES = phrases("because|therefore|thus|hence|this shows|this suggests|this implies|this demonstrates|this highlights|as a result|which means|consequently|although|whereas|due to|so that")
 const EXAMPLES = phrases("for example|for instance|such as|e\\.g\\.|according to|as seen in|as shown")
 const FRAMING = phrases("in conclusion|to conclude|in summary|to summarise|to summarize|overall|this essay|this report|introduction|conclusion")
-// IB command terms say what to do, not what to write about, so a task's own terms skip them.
-const COMMAND_TERMS = new Set("analyse analyze evaluate discuss explain describe compare contrast examine justify outline identify define suggest investigate explore consider assess write answer question respond using include".split(" ").map((w) => w.slice(0, 7)))
+// Signals of narrative and descriptive craft.
+const SPEECH = phrases("said|asked|replied|whispered|shouted|called|cried|muttered|yelled|answered|laughed|snapped|murmured")
+const SENSORY = phrases(
+  "saw|watched|glimpsed|glanced|stared|heard|listened|echo|echoed|whisper|whispered|roar|roared|hum|hums|hummed|buzz|crackle|crackles|crackled|creak|creaked|thud|smell|smelled|smelt|scent|stench|aroma|taste|tasted|sweet|sweetness|bitter|sour|salty|felt|feel|touch|rough|smooth|soft|sharp|cold|icy|warm|hot|damp|wet|sticky|bright|dim|dark|glow|glowed|glowing|glinting|shimmer|shimmered|sparkle|golden|amber|crimson|silver|shadow|shadows|silence|silent|loud|quiet|freezing|trembled|shiver|shivered|breath|heartbeat|pounding|shrieks|barks|steams|stinging",
+)
+const TIME = phrases("suddenly|then|later|afterwards|meanwhile|that night|that morning|that evening|the next day|the next morning|moments later|before long|at last|as soon as|just then|without warning|eventually|at first|soon|by the time")
+// Signals of persuasive writing.
+const ADDRESS = phrases("you|your|we|our|us")
+const MODALS = phrases("should|must|need to|have to|it is time|cannot afford")
+const CALL_TO_ACTION = phrases("so i ask you|i urge|join us|sign|let us|let's|take action|together we|act now|in conclusion|to conclude")
+const COUNTER = phrases("some people (?:say|argue|believe|think)|others (?:say|argue|believe|think)|critics|opponents|admittedly|it is true that|while some")
+// Words that make literary analysis recognisable, and plain words a story should replace.
+const LITERARY = phrases("the author|the poet|the writer|the narrator|the reader|theme|symbol|symbolism|imagery|metaphor|suggests|connotations?|portrays|conveys|stanza|the text")
+const WEAK = phrases("went|got|nice|good|bad|very|really|thing|things|stuff|a lot|lots")
+// IB command terms and text forms say what to do, not what to write about, so a task's own terms skip them.
+const COMMAND_TERMS = new Set(
+  "analyse analyze evaluate discuss explain describe compare contrast examine justify outline identify define suggest investigate explore consider assess write answer question respond using include narrative story stories speech essay letter article report persuade persuasive descriptive paragraph minimum maximum sensory detail details dialogue imagery techniques language devices features"
+    .split(" ")
+    .map((w) => w.slice(0, 7)),
+)
+const MODE_NAME: Record<Mode, string> = { analytical: "analytical writing", narrative: "narrative or descriptive writing", persuasive: "persuasive writing", informative: "informative writing" }
 const STOP = new Set("about above after again against because been before being below between both could does doing down during each from further have having here how into itself more most other ought over same should some such than that their theirs them then there these they this those through under until very what when where which while whom with would your yours will shall must also only just like make made many much well were the and for are but not you all any can her was one our out who get has him his how its may new now old see two way use".split(" "))
 
 /** Measurable signals of quality, each 0–1. */
@@ -29,22 +48,66 @@ export function analyse(text: string, expectedWords: number) {
   const sd = sentences.length > 1 ? Math.sqrt(sentences.reduce((a, b) => a + (b - avgSentence) ** 2, 0) / sentences.length) : 0
   const evidenceHits =
     count(text, /["“][^"”]{3,}["”]/g) + count(text, EXAMPLES) + count(text, /\([A-Z][A-Za-z.&\s]+,?\s\d{4}\)|\[\d+\]/g) + Math.min(count(text, /\b\d+(?:\.\d+)?%?/g), 6) / 2
+  const timeFlow = clamp(count(text, TIME) / Math.max(2, n / 100))
+  const firsts = text.split(/[.!?]+["”]?\s+/).map((s) => s.trim().toLowerCase().match(/^["“]?([a-z']+)/)?.[1]).filter(Boolean)
+  const blockScore = clamp(text.split(/\n\s*\n/).filter((p) => p.trim()).length / (expectedWords >= 500 ? 6 : 4))
+  const paraScore = clamp(paragraphs / (expectedWords >= 500 ? 5 : 3))
+  const linkScore = clamp(count(text, TRANSITIONS) / Math.max(2, n / 150))
 
   return {
     words: n,
     length: clamp(n / expectedWords),
-    structure:
-      (clamp(paragraphs / (expectedWords >= 500 ? 5 : 3)) + (count(text, FRAMING) > 0 ? 1 : 0) + clamp(count(text, TRANSITIONS) / Math.max(2, n / 150))) / 3,
+    structure: (paraScore + (count(text, FRAMING) > 0 ? 1 : 0) + linkScore) / 3,
+    // An argument ends on a call to action rather than "in conclusion".
+    argumentStructure: (paraScore + (count(text, CALL_TO_ACTION) > 0 ? 1 : 0) + linkScore) / 3,
+    blockScore,
     evidence: clamp(evidenceHits / Math.max(2, n / 200)),
     analysis: clamp(count(text, CONNECTIVES) / Math.max(2, sentences.length * 0.25)),
     vocabulary: 0.6 * clamp((ttr - 0.35) / 0.3) + 0.4 * clamp((avgWord - 3.8) / 1.4),
     variety: clamp(sd / 8),
     sentenceFit: avgSentence >= 12 && avgSentence <= 26 ? 1 : avgSentence ? 0.5 : 0,
+    // Narrative and descriptive craft.
+    dialogue: clamp(Math.min(count(text, /["“][^"”]{2,160}["”]/g), count(text, SPEECH)) / 3),
+    sensory: clamp(count(text, SENSORY) / Math.max(3, n / 30)),
+    figurative: clamp((count(text, /\blike (?:a|an|the|small|some)\b/gi) + count(text, /\bas \w+ as\b/gi) + count(text, /\bas if\b/gi)) / 2),
+    timeFlow,
+    openings: firsts.length > 2 ? clamp((new Set(firsts).size / firsts.length - 0.4) / 0.5) : 0,
+    storyStructure: (blockScore + timeFlow) / 2,
+    weakWords: [...new Set(lower.match(WEAK) ?? [])],
+    weakRate: n ? (lower.match(WEAK)?.length ?? 0) / n : 0,
+    // Persuasive technique: rhetorical questions, direct address, modal verbs, a counter-argument.
+    persuasion:
+      (clamp(count(text, /\?/g) / 2) + clamp((count(text, ADDRESS) / Math.max(1, n)) * 25) + clamp(count(text, MODALS) / 3) + (count(text, COUNTER) > 0 ? 1 : 0)) / 4,
+    literary: count(text, LITERARY),
     lower,
     tokens: new Set(words),
   }
 }
 type Signals = ReturnType<typeof analyse>
+
+/** Task wording that gives away the type of writing, checked in order (analysis first: "analyse … the story"). */
+const TASK_MODES: [RegExp, Mode][] = [
+  [/analy[sz]|commentary|literary|how does the (?:author|poet|writer|director|playwright)|compare how/i, "analytical"],
+  [/persua|\bargue|argument|speech|convince|debate|letter to the editor|op-?ed|opinion piece|campaign|proposal/i, "persuasive"],
+  [/narrative|story|stories|creative writing|diary|journal entry|recount|imagine (?:you|that)|memoir|monologue|descriptive|sensory|describe\b.{0,30}\b(?:place|scene|person|moment|setting|market|room|memory|journey|day)/i, "narrative"],
+  [/report|article|explain|inform|instructions|guide|leaflet|brochure|summar|blog|news/i, "informative"],
+]
+
+/** The type of writing: from the task's wording, else the task type, else the writing itself. */
+export function detectMode(task: string | undefined, taskType: string, text: string): { mode: Mode; from: "task" | "type" | "work" } {
+  const hit = task?.trim() ? TASK_MODES.find(([re]) => re.test(task)) : undefined
+  if (hit) return { mode: hit[1], from: "task" }
+  if (taskType === "Lab report") return { mode: "informative", from: "type" }
+  const s = analyse(text, 300)
+  const literary = Math.min(1, s.literary / 3)
+  const scores: [Mode, number][] = [
+    ["narrative", s.dialogue + s.timeFlow + s.sensory + 0.5 * s.figurative - literary],
+    ["persuasive", 2.5 * s.persuasion - literary],
+    ["analytical", literary + s.analysis],
+  ]
+  const [mode, score] = scores.sort((a, b) => b[1] - a[1])[0]
+  return { mode: score >= 1 ? mode : "analytical", from: "work" }
+}
 
 function keywordHits(c: RubricCriterion, s: Signals) {
   const found: string[] = []
@@ -60,14 +123,39 @@ function keywordHits(c: RubricCriterion, s: Signals) {
 
 const LEVEL = ["limited", "adequate", "substantial", "excellent"] as const
 
-function scoreCriterion(c: RubricCriterion, s: Signals, expected: number, mypBands: boolean, taskFit = 1): CriterionResult & { fraction: number } {
+function scoreCriterion(
+  c: RubricCriterion,
+  s: Signals,
+  expected: number,
+  mypBands: boolean,
+  taskFit = 1,
+  mode: Mode = "analytical",
+  judgeByType = false,
+  descriptive = false,
+): CriterionResult & { fraction: number } {
+  const story = mode === "narrative"
+  const persuade = mode === "persuasive"
   const { found, missing } = keywordHits(c, s)
-  const kw = c.keywords.length ? clamp(found.length / Math.min(c.keywords.length, 6)) : s.structure
-  const language = 0.5 * s.vocabulary + 0.3 * s.variety + 0.2 * s.sentenceFit
+  // Depth and support mean different things in a story, a description, an argument and an analysis.
+  const depth = story ? (descriptive ? s.sensory : 0.5 * s.sensory + 0.5 * s.figurative) : persuade ? 0.6 * s.analysis + 0.4 * s.persuasion : s.analysis
+  const support = story ? (descriptive ? s.figurative : clamp(0.6 * s.dialogue + 0.6 * s.timeFlow)) : s.evidence
+  const structure = story ? (descriptive ? (s.blockScore + s.openings) / 2 : s.storyStructure) : persuade ? s.argumentStructure : s.structure
+  const vocabulary = story ? s.vocabulary * (1 - 0.5 * clamp(s.weakRate * 15)) : s.vocabulary
+  const language = story ? 0.4 * vocabulary + 0.3 * s.variety + 0.3 * s.openings : 0.5 * vocabulary + 0.3 * s.variety + 0.2 * s.sentenceFit
+  // Language rubrics' keywords describe literary analysis, so other writing is judged by its own craft instead.
+  const kw = judgeByType
+    ? story
+      ? 0.5 * s.sensory + 0.5 * s.openings
+      : persuade
+        ? s.persuasion
+        : 0.5 * s.evidence + 0.5 * s.structure
+    : c.keywords.length
+      ? clamp(found.length / Math.min(c.keywords.length, 6))
+      : structure
   const raw: Record<Kind, number> = {
-    content: 0.45 * kw + 0.2 * s.evidence + 0.25 * s.analysis + 0.1 * s.structure,
-    organisation: 0.5 * s.structure + 0.2 * kw + 0.15 * s.evidence + 0.15 * language,
-    language: 0.7 * language + 0.3 * s.structure,
+    content: 0.45 * kw + 0.2 * support + 0.25 * depth + 0.1 * structure,
+    organisation: 0.5 * structure + 0.2 * kw + 0.15 * support + 0.15 * language,
+    language: 0.7 * language + 0.3 * structure,
   }
   // Short work can't show a criterion fully, however good the sentences are.
   const fraction = s.words < 20 ? 0 : clamp(raw[c.kind] * (0.35 + 0.65 * s.length) * (c.kind === "content" ? taskFit : 1))
@@ -78,16 +166,49 @@ function scoreCriterion(c: RubricCriterion, s: Signals, expected: number, mypBan
   const strengths: string[] = []
   const improvements: string[] = []
   if (c.kind === "content") {
-    if (found.length >= 3) strengths.push(`You cover key ideas this criterion rewards (${found.slice(0, 4).join(", ")}).`)
-    else if (missing.length) improvements.push(`Address more of what this criterion looks for, e.g. ${missing.slice(0, 4).join(", ")}.`)
-    if (s.analysis >= 0.6) strengths.push("You explain why and how, not just what.")
-    else improvements.push("Follow each point with its significance: \"this shows…\", \"because…\", \"as a result…\".")
-    if (s.evidence >= 0.6) strengths.push("Your points are backed by evidence, examples or data.")
-    else improvements.push("Support each point with a quote, an example or data.")
+    if (!judgeByType) {
+      if (found.length >= 3) strengths.push(`You cover key ideas this criterion rewards (${found.slice(0, 4).join(", ")}).`)
+      else if (missing.length) improvements.push(`Address more of what this criterion looks for, e.g. ${missing.slice(0, 4).join(", ")}.`)
+    }
+    if (story) {
+      if (depth >= 0.6) strengths.push("Vivid sensory detail and imagery bring the writing to life.")
+      else improvements.push("Show, don't tell: let the reader see, hear and feel the moment through sensory detail and a simile or metaphor, instead of naming the feeling.")
+      if (descriptive) {
+        if (support >= 0.6) strengths.push("Figurative language makes the scene come alive.")
+        else improvements.push("Add figurative language (a simile, a metaphor or personification) to make the scene come alive.")
+      } else if (support >= 0.6) strengths.push("The writing moves clearly through time, with dialogue or time markers.")
+      else improvements.push("Move the story along with dialogue and time markers (\"moments later\", \"that night\"), building towards a turning point.")
+    } else if (persuade) {
+      if (depth >= 0.6) strengths.push("Your claims are argued, not just stated, using persuasive techniques.")
+      else improvements.push("Back each claim with a reason (\"because…\", \"this means…\") and use persuasive techniques: a rhetorical question, direct address (\"you\") and a counter-argument you rebut.")
+      if (s.evidence >= 0.6) strengths.push("Your claims are supported by facts and examples.")
+      else improvements.push("Support each claim with a fact, statistic or real example.")
+    } else {
+      if (s.analysis >= 0.6) strengths.push("You explain why and how, not just what.")
+      else improvements.push("Follow each point with its significance: \"this shows…\", \"because…\", \"as a result…\".")
+      if (s.evidence >= 0.6) strengths.push("Your points are backed by evidence, examples or data.")
+      else improvements.push("Support each point with a quote, an example or data.")
+    }
   } else if (c.kind === "organisation") {
-    if (s.structure >= 0.6) strengths.push("Clear structure with paragraphs and linking words.")
-    else improvements.push("Organise the work into paragraphs with an introduction and a conclusion, and link ideas (furthermore, however, therefore).")
-    if (s.evidence < 0.3) improvements.push("Reference your sources and examples clearly (author, year) with a bibliography where relevant.")
+    if (story && descriptive) {
+      if (structure >= 0.6) strengths.push("The description moves through the scene in a clear order.")
+      else improvements.push("Move through the scene in a clear order (near to far, or dawn to dusk), with a new paragraph for each part of it, and end on a striking image.")
+    } else if (story) {
+      if (structure >= 0.6) strengths.push("Well paced, with a new paragraph for each scene, speaker or time jump.")
+      else improvements.push("Shape the story: an opening that hooks the reader, rising tension, a turning point and an ending; start a new paragraph for each new scene, speaker or time jump.")
+    } else if (persuade) {
+      if (structure >= 0.6) strengths.push("A clear argument structure, from position to conclusion.")
+      else improvements.push("Open with a clear position, give one argument per paragraph, and end with a call to action.")
+    } else {
+      if (s.structure >= 0.6) strengths.push("Clear structure with paragraphs and linking words.")
+      else improvements.push("Organise the work into paragraphs with an introduction and a conclusion, and link ideas (furthermore, however, therefore).")
+      if (s.evidence < 0.3) improvements.push("Reference your sources and examples clearly (author, year) with a bibliography where relevant.")
+    }
+  } else if (story) {
+    if (vocabulary >= 0.6) strengths.push("Precise, vivid word choices.")
+    else improvements.push(`Swap plain words${s.weakWords.length ? ` (${s.weakWords.slice(0, 4).join(", ")})` : ""} for precise verbs and vivid adjectives.`)
+    if (s.openings >= 0.5) strengths.push("Sentences start in varied ways.")
+    else improvements.push("Vary how sentences start: with an action, a sound or a description (\"Without warning,\" \"Slowly,\").")
   } else {
     if (s.vocabulary >= 0.6) strengths.push("Varied, precise vocabulary.")
     else improvements.push("Use more precise subject vocabulary and avoid repeating the same words.")
@@ -97,10 +218,27 @@ function scoreCriterion(c: RubricCriterion, s: Signals, expected: number, mypBan
   if (s.length < 0.6) improvements.push(`At about ${s.words} words the work is short for this task; aim for roughly ${expected}.`)
 
   const band = mypBands ? (score === 0 ? "0" : `${Math.ceil(score / 2) * 2 - 1}–${Math.ceil(score / 2) * 2}`) : level[0].toUpperCase() + level.slice(1)
+  const name = c.name.toLowerCase()
   const justification =
-    c.kind === "content" && c.keywords.length
-      ? `Shows ${level} ${c.name.toLowerCase()}: ${found.length} of the ${c.keywords.length} key ideas for this criterion appear, with ${s.analysis >= 0.5 ? "regular" : "little"} explanation and ${s.evidence >= 0.5 ? "good" : "limited"} supporting evidence.`
-      : `Shows ${level} ${c.name.toLowerCase()} based on the work's ${c.kind === "language" ? "vocabulary range and sentence variety" : "paragraphing, linking words and referencing"}.`
+    c.kind === "content" && story && descriptive
+      ? `Shows ${level} ${name}: ${s.sensory >= 0.5 ? "vivid" : "little"} sensory detail and ${s.figurative >= 0.5 ? "strong" : "little"} figurative language.`
+      : c.kind === "content" && story
+      ? `Shows ${level} ${name}: ${s.sensory >= 0.5 ? "vivid" : "little"} sensory detail and imagery, and ${support >= 0.5 ? "a clear" : "little"} sense of movement through dialogue and time.`
+      : c.kind === "content" && persuade
+        ? `Shows ${level} ${name}: claims are ${depth >= 0.5 ? "well" : "rarely"} argued, with ${s.evidence >= 0.5 ? "good" : "limited"} supporting facts and examples.`
+        : c.kind === "content" && c.keywords.length && !judgeByType
+          ? `Shows ${level} ${name}: ${found.length} of the ${c.keywords.length} key ideas for this criterion appear, with ${s.analysis >= 0.5 ? "regular" : "little"} explanation and ${s.evidence >= 0.5 ? "good" : "limited"} supporting evidence.`
+          : `Shows ${level} ${name} based on the work's ${
+              c.kind === "language"
+                ? story
+                  ? "word choice and sentence variety"
+                  : "vocabulary range and sentence variety"
+                : c.kind === "content"
+                  ? "explanation, evidence and structure"
+                  : story
+                    ? "paragraphing and pacing"
+                    : "paragraphing, linking words and referencing"
+            }.`
 
   return { id: c.id, name: c.name, score, max: c.max, band, justification, strengths, improvements, fraction }
 }
@@ -158,19 +296,33 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   if (label === "MYP Language acquisition criteria") caveats.push("Listening and speaking are normally assessed from audio; written work only gives a rough indication for those criteria.")
 
   const signals = analyse(text, expected)
-  const taskTerms = input.task?.trim() ? keywordsFrom(input.task, 20).filter((k) => !COMMAND_TERMS.has(k)).slice(0, 10) : []
+  // Only language subjects guess the type of writing from the work; elsewhere a history recount isn't a story.
+  const languageRubric = /^(?:MYP|DP) Language/.test(label)
+  const detected = input.mode ? { mode: input.mode, from: "chosen" as const } : detectMode(input.task, input.taskType, languageRubric ? text : "")
+  const mode = detected.mode
+  const judgeByType = languageRubric && mode !== "analytical"
+  // Description: asked for, or vivid writing with no dialogue or plot moving it along.
+  const descriptive = mode === "narrative" && (/describ/i.test(input.task ?? "") || (signals.dialogue === 0 && signals.timeFlow <= 0.5 && signals.sensory >= 0.6))
+  if (detected.from === "work" && languageRubric) {
+    caveats.push(`I worked out from your writing that this is ${MODE_NAME[mode]}. If that's wrong, choose the type of writing and grade again.`)
+  }
+  const modeLine = languageRubric || detected.from !== "work" ? ` Marked as ${MODE_NAME[mode]}.` : ""
+  // A story shows its theme rather than naming it ("show, don't tell"), so its task words aren't checked literally.
+  const taskTerms = input.task?.trim() && mode !== "narrative" ? keywordsFrom(input.task, 20).filter((k) => !COMMAND_TERMS.has(k)).slice(0, 10) : []
   const taskWords = input.task?.toLowerCase().match(/[a-z]{5,}/g) ?? []
   const missedTask = taskTerms.filter((k) => ![...signals.tokens].some((t) => t.startsWith(k))).map((k) => taskWords.find((w) => w.startsWith(k)) ?? k)
   // Off-task work loses up to 40% on content criteria; covering 70% of the task's terms counts as on task.
-  const taskFit = taskTerms.length ? 0.6 + 0.4 * clamp((1 - missedTask.length / taskTerms.length) / 0.7) : 1
-  const results = criteria.map((cr) => scoreCriterion(cr, signals, expected, isMyp && cr.max === 8, taskFit))
+  // With only one or two terms a single miss says little, so the penalty is capped at 15%.
+  const floor = taskTerms.length >= 3 ? 0.6 : 0.85
+  const taskFit = taskTerms.length ? floor + (1 - floor) * clamp((1 - missedTask.length / taskTerms.length) / 0.7) : 1
+  const results = criteria.map((cr) => scoreCriterion(cr, signals, expected, isMyp && cr.max === 8, taskFit, mode, judgeByType, descriptive))
   const total = results.reduce((a, r) => a + r.score, 0)
   const max = results.reduce((a, r) => a + r.max, 0)
   const overall = isMyp ? mypGradeFromTotal(Math.round((total / max) * 32)) : percentToGrade((total / max) * 100, DEFAULT_DP_BOUNDARIES)
 
   const ranked = [...results].sort((a, b) => a.fraction - b.fraction)
   const improvements = ranked.flatMap((r) => r.improvements)
-  if (missedTask.length > taskTerms.length / 2) {
+  if (missedTask.length >= 2 && missedTask.length > taskTerms.length / 2) {
     improvements.unshift(`Answer the task directly: it asks about ${missedTask.slice(0, 4).join(", ")}, which your work barely mentions.`)
   }
   const next = [...new Set(improvements)].slice(0, 5)
@@ -178,7 +330,7 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   const summary =
     signals.words < 20
       ? "There isn't enough text to grade. Upload the full piece of work or paste it in."
-      : `${signals.words} words graded against ${label}. Strongest: ${ranked.at(-1)!.name} (${ranked.at(-1)!.score}/${ranked.at(-1)!.max}). Most room to improve: ${ranked[0].name} (${ranked[0].score}/${ranked[0].max}).${taskLine}`
+      : `${signals.words} words graded against ${label}. Strongest: ${ranked.at(-1)!.name} (${ranked.at(-1)!.score}/${ranked.at(-1)!.max}). Most room to improve: ${ranked[0].name} (${ranked[0].score}/${ranked[0].max}).${modeLine}${taskLine}`
 
   return {
     overall_grade: overall,

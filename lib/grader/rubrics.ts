@@ -269,6 +269,15 @@ export const TASK_TYPES = [
 ] as const
 export type TaskType = (typeof TASK_TYPES)[number]
 
+/** Types of writing the grader marks by their own craft. */
+export const WRITING_MODES = {
+  analytical: "Analytical (essay, commentary)",
+  narrative: "Narrative or descriptive (story, recount, description)",
+  persuasive: "Persuasive (speech, letter, argument)",
+  informative: "Informative (report, article, explanation)",
+} as const
+export type Mode = keyof typeof WRITING_MODES
+
 /** Rough length a complete piece of this kind runs to (words), before the year adjustment. */
 export const EXPECTED_WORDS: Record<TaskType, number> = {
   "Summative assessment": 500,
@@ -296,6 +305,7 @@ export const gradeRequest = z.object({
   task: z.string().max(5_000).optional(),
   /** Comma-separated criterion ids the task assesses, e.g. "A,C". Empty: all. */
   criteria: z.string().max(100).optional(),
+  mode: z.enum(["analytical", "narrative", "persuasive", "informative"]).optional(),
   text: z.string().max(200_000).optional(),
 })
 export type GradeRequest = z.infer<typeof gradeRequest>

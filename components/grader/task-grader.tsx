@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
-import { builtInRubric, TASK_TYPES, type GradeResult, type TaskType } from "@/lib/grader/rubrics"
+import { builtInRubric, TASK_TYPES, WRITING_MODES, type GradeResult, type TaskType } from "@/lib/grader/rubrics"
 import { SUBJECT_GROUPS } from "@/lib/ib"
 
 const OTHER = "__other"
@@ -172,6 +172,16 @@ export function TaskGrader() {
                 ))}
               </NativeSelect>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="g-mode" className={label}>Type of writing</label>
+            <NativeSelect id="g-mode" name="mode" defaultValue="">
+              <option value="">Work it out from the task or the writing</option>
+              {Object.entries(WRITING_MODES).map(([value, text]) => (
+                <option key={value} value={value}>{text}</option>
+              ))}
+            </NativeSelect>
           </div>
 
           {/* key: ticks reset when the subject or task type changes the criteria. */}
