@@ -1,3 +1,4 @@
+import cueWeights from "./cue-weights.json"
 import type { Strand } from "./rubrics"
 
 /**
@@ -677,19 +678,24 @@ export const STRANDS: Record<string, Record<string, Strand[]>> = {
   },
 }
 
-const compiled = new WeakMap<Strand, RegExp[]>()
+/** How common each cue is: the share of sections, across all the blind samples, in which it appears (see blind.test.ts). */
+const frequency = cueWeights as Record<string, number>
+
+const compile = (alt: string) => {
+  if (alt.startsWith("cs:")) return new RegExp(alt.slice(3), "gm")
+  return alt.startsWith("re:") ? new RegExp(alt.slice(3), "gim") : new RegExp(`\\b(?:${alt.replace(/\*/g, "\\w*").replace(/ /g, "\\s+")})\\b`, "gi")
+}
+const compiled = new WeakMap<Strand, { alt: string; re: RegExp; common: number }[]>()
 function patterns(strand: Strand) {
   let res = compiled.get(strand)
   if (!res) {
-    res = strand.cues.split(/,\s+/).map((alt) => {
-      const a = alt.trim()
-      if (a.startsWith("cs:")) return new RegExp(a.slice(3), "gm")
-      return a.startsWith("re:") ? new RegExp(a.slice(3), "gim") : new RegExp(`\\b(?:${a.replace(/\*/g, "\\w*").replace(/ /g, "\\s+")})\\b`, "gi")
-    })
+    res = strand.cues.split(/,\s+/).map((raw) => ({ alt: raw.trim(), re: compile(raw.trim()), common: frequency[raw.trim()] ?? 0 }))
     compiled.set(strand, res)
   }
   return res
 }
+/** Every cue in every strand, for measuring how common each one is. */
+export const allCues = () => [...new Set(Object.values(STRANDS).flatMap((rubric) => Object.values(rubric).flatMap((strands) => strands.flatMap((s) => patterns(s).map((p) => p.alt)))))].map((alt) => ({ alt, re: compile(alt) }))
 
 /** Calibration constants, fitted to the blind samples in ./samples (see blind.test.ts). */
 export const TUNE = {
@@ -711,21 +717,72 @@ export const TUNE = {
   /** Final stretch of the scale: mark = gain × raw − offset. */
   gain: 1.15,
   offset: 0,
+  /** Long work is judged in sections of about this many words, so stray words across a long piece don't add up to a strand. */
+  window: 250,
+  /** Share of sections (the best ones) a strand is mainly judged on, and the weight given to all sections. */
+  top: 0.34,
+  spread: 0.3,
+  /** How strongly a cue that appears in every kind of work ("because", "result") is discounted: weight = (1 − frequency)^rare. */
+  rare: 1,
+  /** Share of the language mark that comes from the sophistication of the writing (academic words, linked clauses, few vague words). */
+  soph: 0,
+}
+
+let sectioned: { key: string; sections: string[] } | undefined
+/** The work cut into sections of about TUNE.window words, on line and sentence breaks. */
+export function sections(text: string) {
+  const key = `${TUNE.window}:${text}`
+  if (sectioned?.key === key) return sectioned.sections
+  const count = (s: string) => s.split(/\s+/).filter(Boolean).length
+  // A very long line (a pasted paragraph) is cut into sentences first.
+  const units = text.split("\n").flatMap((line) => (count(line) > TUNE.window ? line.split(/(?<=[.!?])\s+/) : [line]))
+  const out: string[] = []
+  let cur: string[] = []
+  let n = 0
+  for (const unit of units) {
+    cur.push(unit)
+    n += count(unit)
+    if (n >= TUNE.window) {
+      out.push(cur.join("\n"))
+      cur = []
+      n = 0
+    }
+  }
+  // A short tail joins the previous section so it isn't judged on a few words.
+  if (n && out.length && n < TUNE.window / 2) out[out.length - 1] += `\n${cur.join("\n")}`
+  else if (n) out.push(cur.join("\n"))
+  sectioned = { key, sections: out }
+  return out
 }
 
 /**
- * How clearly a strand shows in the work, 0–1: how many different cues appear (breadth),
- * and whether they keep appearing through the piece (sustained).
+ * How clearly a strand shows in the work, 0–1. Within a section: how many different cues appear (breadth)
+ * and whether they recur. Across the work: mainly the best sections, partly all of them.
  */
-export function strandScore(strand: Strand, text: string, words: number) {
-  const scale = Math.max(1, words / 500)
-  let hits = 0
-  let total = 0
-  for (const re of patterns(strand)) {
-    const n = text.match(re)?.length ?? 0
-    if (n) hits++
-    total += Math.min(n, Math.ceil(4 * scale))
+export function strandDetail(strand: Strand, text: string) {
+  const pats = patterns(strand)
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+  const weights = pats.map((p) => Math.max(0.05, 1 - p.common) ** TUNE.rare)
+  const need = Math.min(strand.need * TUNE.breadth, pats.length) * mean(weights)
+  const scores = sections(text)
+    .map((section) => {
+      let hits = 0
+      let total = 0
+      pats.forEach((p, i) => {
+        const n = section.match(p.re)?.length ?? 0
+        if (n) hits += weights[i]
+        total += Math.min(n, 4) * weights[i]
+      })
+      return TUNE.breadthShare * Math.min(1, hits / need) + (1 - TUNE.breadthShare) * Math.min(1, total / (need * TUNE.sustain))
+    })
+    .sort((a, b) => b - a)
+  if (!scores.length) return { top: 0, all: 0, best: 0, shown: 0 }
+  return {
+    /** The best sections. */
+    top: mean(scores.slice(0, Math.max(1, Math.ceil(scores.length * TUNE.top)))),
+    all: mean(scores),
+    best: scores[0],
+    /** Share of sections where the strand shows at least half-way. */
+    shown: scores.filter((x) => x >= 0.5).length / scores.length,
   }
-  const need = Math.min(strand.need * TUNE.breadth, patterns(strand).length)
-  return TUNE.breadthShare * Math.min(1, hits / need) + (1 - TUNE.breadthShare) * Math.min(1, total / (need * TUNE.sustain * scale))
 }

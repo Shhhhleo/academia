@@ -1,56 +1,88 @@
-import { writeFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { close, gradeAll, mean, samples, SETS } from "./blind-harness"
+import { close, crossValidate, cueFrequencies, fit, gradeAll, mean, samples, SETS, trainingData } from "./blind-harness"
 
 /**
- * Blind test set: sample student work for every MYP and DP rubric at three levels, written and marked
- * (as an IB teacher would) without sight of the grader. Set GRADER_REPORT to a file path for a full table.
+ * Blind test set: student work for every MYP and DP rubric, written and marked (as an IB teacher would) without
+ * sight of the grader. Round 1 is short and condensed pieces; round 2 is full-length work, including padded pieces,
+ * slide-deck text and work submitted for criteria it doesn't address.
+ *
+ * The marking model is trained on these marks. To retrain after changing cues, features or samples:
+ *   UPDATE_CUE_WEIGHTS=1 npx vitest run lib/grader/blind.test.ts   (then again with UPDATE_MODEL=1)
+ * Set GRADER_REPORT to a file path for a full table.
  */
-const rows = gradeAll()
-const share = (level: string, of: "got" | "want") => mean(rows.filter((m) => m.level === level).map((m) => m[of] / m.max))
+type Row = { got: number; want: number; max: number; set: string; level: string; kind: string; round: number }
+const file = (name: string) => fileURLToPath(new URL(name, import.meta.url))
+const error = (rs: Row[]) => mean(rs.map((m) => Math.abs(m.got - m.want) / m.max))
+const closeShare = (rs: Row[]) => rs.filter(close).length / Math.max(1, rs.length)
+const marked = (rs: Row[], of: "got" | "want") => mean(rs.map((m) => m[of] / m.max))
+
+const data = trainingData()
+const model = { bg: data.bg, bgAll: data.bgAll, groups: fit(data) }
+/** The grader as shipped, on work it was trained on. */
+const fitted: Row[] = gradeAll()
+/** Models that never saw the file they are marking: the honest measure. */
+const unseen: Row[] = crossValidate(data)
 
 if (process.env.GRADER_REPORT) {
-  const lines = rows.map((m) => `${close(m) ? "  " : "!!"} ${m.set.padEnd(18)} ${m.level.padEnd(6)} ${m.id.padEnd(2)} teacher ${m.want}/${m.max}  grader ${m.got}/${m.max}`)
-  const bySet = [...new Set(rows.map((m) => m.set))].map((set) => {
-    const rs = rows.filter((m) => m.set === set)
-    return `${set.padEnd(18)} close ${rs.filter(close).length}/${rs.length}  bias ${(mean(rs.map((m) => (m.got - m.want) / m.max)) * 100).toFixed(0)}%`
-  })
-  const summary = [
-    `marks: ${rows.length}  close: ${rows.filter(close).length} (${Math.round((rows.filter(close).length / rows.length) * 100)}%)`,
-    `mean error: ${(mean(rows.map((m) => Math.abs(m.got - m.want) / m.max)) * 100).toFixed(1)}% of the scale`,
-    ...["strong", "mid", "weak"].map((l) => `${l.padEnd(6)} teacher ${(share(l, "want") * 100).toFixed(0)}%  grader ${(share(l, "got") * 100).toFixed(0)}%`),
+  const line = (name: string, rs: Row[]) =>
+    `${name.padEnd(20)} n ${String(rs.length).padStart(3)}  close ${String(Math.round(closeShare(rs) * 100)).padStart(3)}%  error ${(error(rs) * 100).toFixed(1).padStart(4)}%  teacher ${(marked(rs, "want") * 100).toFixed(0).padStart(2)}%  grader ${(marked(rs, "got") * 100).toFixed(0).padStart(2)}%`
+  const table = (title: string, rows: Row[]) => [
+    title,
+    line("all", rows),
+    line("round 1 (short)", rows.filter((m) => m.round === 1)),
+    line("round 2 (full)", rows.filter((m) => m.round === 2)),
+    ...["strong", "good", "mid", "weak"].map((l) => line(`  full, ${l}`, rows.filter((m) => m.round === 2 && m.level === l && m.kind === "normal"))),
+    ...["padded", "mismatch", "slides"].map((k) => line(`  full, ${k}`, rows.filter((m) => m.kind === k))),
+    ...Object.keys(SETS).map((set) => line(`  ${set}`, rows.filter((m) => m.set === set))),
+    "",
   ]
-  writeFileSync(process.env.GRADER_REPORT, [...summary, "", ...bySet, "", ...lines].join("\n"))
+  const lines = fitted.map((m) => `${close(m) ? "  " : "!!"} r${m.round} ${m.set.padEnd(18)} ${m.level.padEnd(6)} ${m.kind.padEnd(8)} teacher ${m.want}/${m.max}  grader ${m.got}/${m.max}`)
+  writeFileSync(process.env.GRADER_REPORT, [...table("ON UNSEEN FILES (each file left out of training in turn)", unseen), ...table("AS SHIPPED (trained on all files)", fitted), ...lines].join("\n"))
 }
 
 describe("blind samples for every subject", () => {
   it("covers every set", () => {
-    expect(samples.length).toBeGreaterThanOrEqual(99)
+    expect(samples.length).toBeGreaterThanOrEqual(220)
     for (const s of samples) expect(SETS[s.set], s.set).toBeDefined()
   })
 
-  // Fitted: 91% close, 10.9% mean error. The old keyword marking scored 62% and 23.1% on the same samples.
-  it("stays close to the teacher's marks overall", () => {
-    expect(rows.filter(close).length / rows.length).toBeGreaterThanOrEqual(0.87)
-    expect(mean(rows.map((m) => Math.abs(m.got - m.want) / m.max))).toBeLessThanOrEqual(0.125)
+  // Common cues ("because", "result") count for less than subject-specific ones. The weights are measured from the samples.
+  it("has cue weights measured from the current samples and cues", () => {
+    const fresh = cueFrequencies()
+    if (process.env.UPDATE_CUE_WEIGHTS) writeFileSync(file("./cue-weights.json"), `${JSON.stringify(fresh, null, 1)}\n`)
+    else expect(JSON.parse(readFileSync(file("./cue-weights.json"), "utf8")), "cues or samples changed: run once with UPDATE_CUE_WEIGHTS=1").toEqual(fresh)
   })
 
-  it("stays close in every subject", () => {
-    for (const set of Object.keys(SETS)) {
-      const rs = rows.filter((m) => m.set === set)
-      expect(rs.filter(close).length / rs.length, set).toBeGreaterThanOrEqual(0.65)
-    }
+  it("ships the model trained on the current samples", () => {
+    if (process.env.UPDATE_MODEL) writeFileSync(file("./model.json"), `${JSON.stringify(model, null, 1)}\n`)
+    else expect(JSON.parse(readFileSync(file("./model.json"), "utf8")), "samples, cues or features changed: run once with UPDATE_MODEL=1").toEqual(model)
   })
 
-  it("marks strong work well above weak work at every level", () => {
-    expect(share("strong", "got")).toBeGreaterThanOrEqual(0.85)
-    expect(share("mid", "got")).toBeGreaterThan(0.45)
-    expect(share("mid", "got")).toBeLessThan(0.7)
-    expect(share("weak", "got")).toBeLessThanOrEqual(0.32)
-    // Within each set and criterion, the strong sample never scores below the weak one.
-    for (const m of rows.filter((x) => x.level === "strong")) {
-      const weak = rows.find((x) => x.level === "weak" && x.set === m.set && x.id === m.id && x.max === m.max)
-      if (weak) expect(m.got, `${m.set} ${m.id}`).toBeGreaterThanOrEqual(weak.got)
-    }
+  // Measured: 83% close and 12.9% error overall, 79% and 14.7% on full-length work.
+  // The hand-set formula it replaced scored 69% and 18.2% on full-length work.
+  it("stays close to the teacher's marks on files it was not trained on", () => {
+    expect(closeShare(unseen)).toBeGreaterThanOrEqual(0.8)
+    expect(error(unseen)).toBeLessThanOrEqual(0.14)
+    const full = unseen.filter((m) => m.round === 2)
+    expect(closeShare(full)).toBeGreaterThanOrEqual(0.75)
+    expect(error(full)).toBeLessThanOrEqual(0.16)
+  })
+
+  it("stays close as shipped, overall and in every subject", () => {
+    expect(closeShare(fitted)).toBeGreaterThanOrEqual(0.82)
+    expect(error(fitted)).toBeLessThanOrEqual(0.125)
+    for (const set of Object.keys(SETS)) expect(closeShare(fitted.filter((m) => m.set === set)), set).toBeGreaterThanOrEqual(0.6)
+  })
+
+  it("keeps full-length strong, middle and weak work apart", () => {
+    const level = (l: string) => marked(fitted.filter((m) => m.round === 2 && m.level === l && m.kind === "normal"), "got")
+    expect(level("strong")).toBeGreaterThanOrEqual(0.75)
+    expect(level("mid")).toBeLessThanOrEqual(0.62)
+    expect(level("weak")).toBeLessThanOrEqual(0.38)
+    // Known weak spots, kept from getting worse: long but thin work, and criteria the work doesn't address.
+    expect(error(fitted.filter((m) => m.kind === "padded"))).toBeLessThanOrEqual(0.23)
+    expect(error(fitted.filter((m) => m.kind === "mismatch"))).toBeLessThanOrEqual(0.24)
   })
 })

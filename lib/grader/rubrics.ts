@@ -23,6 +23,12 @@ export interface RubricCriterion {
   keywords: string[]
   /** The criterion's strands, attached on the server for built-in rubrics. */
   strands?: Strand[]
+  /** Highest share of the marks written work can earn, for criteria judged from a performance or artwork. */
+  cap?: number
+  /** How strongly this criterion shows in the work compared with the rubric's other criteria: against their average and against the strongest. */
+  rel?: { top: number; lead: number }
+  /** "Rubric label|criterion id", used to look up the criterion's background level in the trained model. */
+  key?: string
 }
 
 const c = (id: string, name: string, kind: Kind, keywords = "", max = 8): RubricCriterion => ({
@@ -372,6 +378,8 @@ export interface CriterionResult {
 
 export interface GradeResult {
   overall_grade: number
+  /** Only some of the rubric's criteria were graded, so the marks are shown instead of the 1–7 grade. */
+  partial: boolean
   summary: string
   criteria: CriterionResult[]
   next_steps: string[]
