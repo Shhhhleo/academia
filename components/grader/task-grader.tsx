@@ -488,11 +488,26 @@ function List({ title, items }: { title: string; items: string[] }) {
 }
 
 function Evaluation({ result, feedback }: { result: GradeResult; feedback: ReactNode }) {
+  const total = result.criteria.reduce((a, c) => a + c.score, 0)
+  const max = result.criteria.reduce((a, c) => a + c.max, 0)
   return (
     <div className="grid gap-4">
-      <Panel title="Estimated grade">
+      {/* A 1–7 grade needs every criterion. With only some ticked, show the marks (out of 8 each in the MYP). */}
+      <Panel title={result.partial ? "Estimated mark" : "Estimated grade"}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <GradeNumber grade={result.overall_grade} size="xl" />
+          {result.partial ? (
+            <span className="inline-flex items-baseline gap-0.5 font-mono font-semibold tracking-tight tabular-nums">
+              <span className="text-7xl">{total}</span>
+              <span className="text-sm font-medium text-muted-foreground">/{max}</span>
+            </span>
+          ) : (
+            <div className="grid justify-items-start gap-1">
+              <GradeNumber grade={result.overall_grade} size="xl" />
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {total}/{max} marks
+              </span>
+            </div>
+          )}
           <p className="text-sm">{result.summary}</p>
         </div>
       </Panel>

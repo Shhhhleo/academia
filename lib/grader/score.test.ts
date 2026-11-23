@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { SUBJECT_GROUPS } from "@/lib/ib"
 import { builtInRubric, gradeRequest, isLanguageGroup, TASK_TYPES, taskExample, taskTypesFor, type TaskType } from "./rubrics"
-import { artsEvaluation } from "./fixtures"
+import { artsEvaluation, narrativeStrong } from "./fixtures"
 import { gradeTask, parseRubric } from "./score"
 import { STRANDS } from "./strands"
 
@@ -175,6 +175,24 @@ describe("subject-aware form", () => {
     expect(r.mode).toBe("analytical")
     expect(r.summary).not.toMatch(/Marked as/)
     expect([...r.next_steps, ...r.criteria.flatMap((c) => c.improvements)].join(" ")).not.toMatch(/show, don't tell|Shape the story|sensory/i)
+  })
+
+  it("gives marks, not a 1–7 grade, when only some criteria are ticked", () => {
+    const some = gradeTask(req({ criteria: "A,C" }), strong)
+    expect(some.partial).toBe(true)
+    expect(some.caveats).toMatch(/a mark out of 16, not a 1–7 grade/)
+    expect(gradeTask(req({}), strong).partial).toBe(false)
+  })
+
+  it("doesn't give marks for criteria the work can't show", () => {
+    // A story has no analysis in it, however good the storytelling.
+    const story = gradeTask(req({ taskType: "Summative assessment", criteria: "A,C", task: "Write a story about courage." }), narrativeStrong)
+    expect(story.criteria[0].score).toBeLessThanOrEqual(3)
+    expect(story.criteria[1].score).toBeGreaterThan(story.criteria[0].score)
+    // Creating is judged from the artwork itself, so writing about it earns a low mark at most.
+    const arts = gradeTask(req({ subjectName: "Visual Art", subjectGroup: "Arts", year: "5", taskType: "Summative assessment", criteria: "C" }), artsEvaluation)
+    expect(arts.criteria[0].score).toBeLessThanOrEqual(3)
+    expect(arts.caveats).toMatch(/Creating\/performing: assessed from the recording, performance or artwork itself/)
   })
 
   it("expects science and maths answers to be about half as long, but not lab reports", () => {

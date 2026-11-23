@@ -1,7 +1,11 @@
 import { DEFAULT_DP_BOUNDARIES, mypGradeFromTotal, percentToGrade } from "@/lib/grades"
 import { coverageFromMatch } from "./ai/meaning"
 import { builtInRubric, EXPECTED_WORDS, isLanguageGroup, type CriterionResult, type GradeRequest, type GradeResult, type Kind, type Mode, type RubricCriterion } from "./rubrics"
-import { STRANDS, strandScore, TUNE } from "./strands"
+import { featureVector, MODEL, predict, type Features } from "./model"
+import { STRANDS, strandDetail, TUNE } from "./strands"
+
+/** The features of each criterion scored, collected when GRADER_TRACE is set (used to train the marking model). */
+export const TRACE: { id: string; key: string; group: string; cap: number; features: Features }[] = []
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 const count = (text: string, re: RegExp) => text.match(re)?.length ?? 0
@@ -25,6 +29,8 @@ const COUNTER = phrases("some people (?:say|argue|believe|think)|others (?:say|a
 // Words that make literary analysis recognisable, and plain words a story should replace.
 const LITERARY = phrases("the author|the poet|the writer|the narrator|the reader|theme|symbol|symbolism|imagery|metaphor|suggests|connotations?|portrays|conveys|stanza|the text")
 const WEAK = phrases("went|got|nice|good|bad|very|really|thing|things|stuff|a lot|lots")
+const RETELLING = phrases("then|after that|afterwards|next|later|one day|when he|when she|when they|goes|went|comes|came|tells|told|says|said|finds|found|decides|decided|at the start|at the end|in the end|at first")
+const SUBORDINATORS = phrases("although|whereas|despite|whose|which|thereby|rather than|not only|even though|unless|whether|given that|provided that|so that|in order to|while")
 // IB command terms and text forms say what to do, not what to write about, so a task's own terms skip them.
 const COMMAND_TERMS = new Set(
   "analyse analyze evaluate discuss explain describe compare contrast examine justify outline identify define suggest investigate explore consider assess write answer question respond using include narrative story stories speech essay letter article report persuade persuasive descriptive paragraph minimum maximum sensory detail details dialogue imagery techniques language devices features"
@@ -68,6 +74,16 @@ export function analyse(text: string, expectedWords: number) {
     vocabulary: 0.6 * clamp((ttr - 0.35) / 0.3) + 0.4 * clamp((avgWord - 3.8) / 1.4),
     variety: clamp(sd / 8),
     sentenceFit: avgSentence >= 12 && avgSentence <= 26 ? 1 : avgSentence ? 0.5 : 0,
+    avgSentence,
+    avgWord,
+    ttr,
+    longShare: n ? words.filter((w) => w.length >= 8).length / n : 0,
+    subordination: clamp(count(text, SUBORDINATORS) / Math.max(2, sentences.length * 0.3)),
+    connectives: sentences.length ? count(text, CONNECTIVES) / sentences.length : 0,
+    transitions: n ? (count(text, TRANSITIONS) / n) * 100 : 0,
+    paragraphs,
+    // Retelling: "then", "after that", "next" per 100 words.
+    narration: n ? (count(text, RETELLING) / n) * 100 : 0,
     // Narrative and descriptive craft.
     dialogue: clamp(Math.min(count(text, /["“][^"”]{2,160}["”]/g), count(text, SPEECH)) / 3),
     sensory: clamp(count(text, SENSORY) / Math.max(3, n / 30)),
@@ -75,6 +91,11 @@ export function analyse(text: string, expectedWords: number) {
     timeFlow,
     openings: firsts.length > 2 ? clamp((new Set(firsts).size / firsts.length - 0.4) / 0.5) : 0,
     storyStructure: (blockScore + timeFlow) / 2,
+    // Longer academic words, clauses linked by more than "and then", and few vague words.
+    sophistication:
+      0.5 * clamp(((n ? words.filter((w) => w.length >= 8).length / n : 0) - 0.06) / 0.14) +
+      0.3 * clamp(count(text, SUBORDINATORS) / Math.max(2, sentences.length * 0.3)) +
+      0.2 * (1 - clamp((n ? (lower.match(WEAK)?.length ?? 0) / n : 0) * 20)),
     weakWords: [...new Set(lower.match(WEAK) ?? [])],
     weakRate: n ? (lower.match(WEAK)?.length ?? 0) / n : 0,
     // Persuasive technique: rhetorical questions, direct address, modal verbs, a counter-argument.
@@ -144,7 +165,8 @@ function scoreCriterion(
   const support = story ? (descriptive ? s.figurative : clamp(0.6 * s.dialogue + 0.6 * s.timeFlow)) : s.evidence
   const structure = story ? (descriptive ? (s.blockScore + s.openings) / 2 : s.storyStructure) : persuade ? s.argumentStructure : s.structure
   const vocabulary = story ? s.vocabulary * (1 - 0.5 * clamp(s.weakRate * 15)) : s.vocabulary
-  const language = story ? 0.4 * vocabulary + 0.3 * s.variety + 0.3 * s.openings : 0.5 * vocabulary + 0.3 * s.variety + 0.2 * s.sentenceFit
+  const fluency = story ? 0.4 * vocabulary + 0.3 * s.variety + 0.3 * s.openings : 0.5 * vocabulary + 0.3 * s.variety + 0.2 * s.sentenceFit
+  const language = (1 - TUNE.soph) * fluency + TUNE.soph * s.sophistication
   // Language rubrics' keywords describe literary analysis, so other writing is judged by its own craft instead.
   const kw = judgeByType
     ? story
@@ -156,7 +178,8 @@ function scoreCriterion(
       ? clamp(found.length / Math.min(c.keywords.length, 6))
       : structure
   // Built-in rubrics are marked strand by strand. A story or speech in a language subject is judged by its craft instead.
-  const parts = judgeByType || c.kind === "language" ? [] : (c.strands ?? []).map((strand) => ({ strand, score: strandScore(strand, s.text, s.words) }))
+  const details = (c.strands ?? []).map((strand) => ({ strand, ...strandDetail(strand, s.text) }))
+  const parts = judgeByType || c.kind === "language" ? [] : details.map((d) => ({ strand: d.strand, score: (1 - TUNE.spread) * d.top + TUNE.spread * d.all }))
   const coverage = parts.length ? parts.reduce((a, p) => a + p.score * p.strand.weight, 0) / parts.reduce((a, p) => a + p.strand.weight, 0) : 0
   // How far points are developed: reasons given, and specifics such as examples, figures and quotations.
   const reasoned = 0.65 * depth + 0.35 * support
@@ -172,8 +195,23 @@ function scoreCriterion(
         organisation: 0.5 * structure + 0.2 * kw + 0.15 * support + 0.15 * language,
         language: 0.7 * language + 0.3 * structure,
       }
+  // What can be measured about this criterion in this work. For built-in rubrics, a model trained on
+  // teacher-marked samples turns these into the mark; otherwise the formula above is used.
+  const weight = details.reduce((a, d) => a + d.strand.weight, 0) || 1
+  const across = (k: "top" | "all" | "best" | "shown") => details.reduce((a, d) => a + d[k] * d.strand.weight, 0) / weight
+  const features: Features = {
+    top: across("top"), all: across("all"), best: across("best"), shown: across("shown"), minTop: details.length ? Math.min(...details.map((d) => d.top)) : 0,
+    structure, fluency, sophistication: s.sophistication, vocabulary: s.vocabulary, variety: s.variety, sentenceFit: s.sentenceFit, longShare: s.longShare,
+    subordination: s.subordination, evidence: s.evidence, analysis: s.analysis, length: s.length, words: s.words, paragraphs: s.paragraphs,
+    avgSentence: s.avgSentence, avgWord: s.avgWord, weakRate: s.weakRate, connectives: s.connectives, transitions: s.transitions,
+    relTop: c.rel?.top ?? 0, relLead: c.rel?.lead ?? 0, narration: s.narration, timeFlow: s.timeFlow,
+  }
+  const group = c.kind === "language" ? "language" : parts.length ? `strand-${c.kind}` : undefined
+  if (process.env.GRADER_TRACE) TRACE.push({ id: c.id, key: c.key ?? "", group: group ?? "", cap: c.cap ?? 1, features })
   // Short work can't show a criterion fully, however good the sentences are.
-  const fraction = s.words < 20 ? 0 : clamp((TUNE.gain * raw[c.kind] - TUNE.offset) * (TUNE.lengthFloor + (1 - TUNE.lengthFloor) * Math.min(1, s.length / TUNE.lengthFull)) * (c.kind === "content" ? taskFit : 1))
+  const formula = clamp((TUNE.gain * raw[c.kind] - TUNE.offset) * (TUNE.lengthFloor + (1 - TUNE.lengthFloor) * Math.min(1, s.length / TUNE.lengthFull)))
+  const judged = predict(group, featureVector(features, MODEL.bg[c.key ?? ""] ?? MODEL.bgAll)) ?? formula
+  const fraction = s.words < 20 ? 0 : clamp(Math.min(c.cap ?? 1, 1) * judged * (c.kind === "content" ? taskFit : 1))
   const score = Math.round(fraction * c.max)
   // Quarters of the scale, matching MYP bands: 1–2 limited, 3–4 adequate, 5–6 substantial, 7–8 excellent.
   const level = LEVEL[Math.min(3, Math.max(0, Math.ceil((score / c.max) * 4) - 1))]
@@ -306,6 +344,8 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
 
   const caveats = ["This is an automatic estimate: it checks your work for what the rubric rewards (key ideas, evidence, explanation, structure and language), but it can't judge whether your ideas are correct. Use it as a guide before your teacher marks it."]
   let { label, criteria } = builtIn
+  // Only some of the rubric's criteria were ticked: a 1–7 grade needs all of them.
+  let partial = false
   const custom = input.rubric?.trim() ? parseRubric(input.rubric, isMyp ? 8 : 10) : []
   if (custom.length) {
     ;({ label, criteria } = { label: "your rubric", criteria: custom })
@@ -322,16 +362,34 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   if (picked.length) {
     const only = criteria.filter((cr) => picked.includes(cr.id))
     if (only.length) {
-      if (only.length < criteria.length) caveats.push(`Graded on criteria ${only.map((cr) => cr.id).join(", ")} only, as you selected; the 1–7 grade is estimated from those criteria.`)
+      if (only.length < criteria.length) {
+        partial = true
+        caveats.push(`Graded on criteria ${only.map((cr) => cr.id).join(", ")} only, as you selected, so the result is a mark out of ${only.reduce((a, cr) => a + cr.max, 0)}, not a 1–7 grade.`)
+      }
       criteria = only
     } else caveats.push("None of the criteria you ticked are in this rubric, so every criterion was graded.")
   }
   if (!custom.length) {
-    criteria = criteria.map((cr) => ({ ...cr, strands: STRANDS[label]?.[cr.id] }))
-    const unseen = criteria.filter((cr) => /^(Listening|Speaking|Creating\/performing|Creating and presenting|Applying and performing|Interactive skills)$/.test(cr.name) || label.includes("oral"))
+    // Judged from the artwork, performance or recording: writing about it can only earn a low mark.
+    const UNSEEN = /^(Listening|Speaking|Creating\/performing|Creating and presenting|Applying and performing|Interactive skills)$/
+    // How strongly each criterion of the rubric shows in the work, ticked or not: a criterion the work
+    // doesn't address stands out as weaker than the others.
+    const shows = builtIn.criteria.flatMap((cr) => {
+      const strands = STRANDS[label]?.[cr.id]
+      if (!strands?.length) return []
+      const weight = strands.reduce((a, st) => a + st.weight, 0)
+      return [{ id: cr.id, top: strands.reduce((a, st) => a + strandDetail(st, text).top * st.weight, 0) / weight }]
+    })
+    criteria = criteria.map((cr) => {
+      const me = shows.find((x) => x.id === cr.id)
+      const others = shows.filter((x) => x.id !== cr.id).map((x) => x.top)
+      const rel = me && others.length ? { top: me.top - others.reduce((a, b) => a + b, 0) / others.length, lead: me.top - Math.max(...others) } : undefined
+      return { ...cr, strands: STRANDS[label]?.[cr.id], cap: UNSEEN.test(cr.name) ? 0.4 : undefined, rel, key: `${label}|${cr.id}` }
+    })
+    const unseen = criteria.filter((cr) => cr.cap)
     if (unseen.length) {
-      caveats.push(`${unseen.map((cr) => cr.name).join(", ")}: normally assessed from the recording, performance or artwork itself, so written work only gives a rough indication.`)
-    }
+      caveats.push(`${unseen.map((cr) => cr.name).join(", ")}: assessed from the recording, performance or artwork itself, so written work can only earn a low mark here.`)
+    } else if (label.includes("oral")) caveats.push("An oral is assessed from the recording, so a written script only gives a rough indication.")
   }
 
   const signals = analyse(text, expected)
@@ -365,7 +423,8 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   const floor = mode === "narrative" ? 0.75 : meaning !== undefined || taskTerms.length >= 3 ? 0.6 : 0.85
   const taskFit = coverage === undefined ? 1 : floor + (1 - floor) * (meaning !== undefined ? coverage : clamp(coverage / 0.7))
   const offTask = meaning !== undefined ? coverage! < 0.25 : missedTask.length >= 2 && missedTask.length > taskTerms.length / 2
-  const results = criteria.map((cr) => scoreCriterion(cr, signals, expected, isMyp && cr.max === 8, taskFit, mode, judgeByType, descriptive))
+  // A story is judged by its craft on the criteria about producing text, but Analysing still needs analysis.
+  const results = criteria.map((cr) => scoreCriterion(cr, signals, expected, isMyp && cr.max === 8, taskFit, mode, judgeByType && !/analys/i.test(cr.name), descriptive))
   const total = results.reduce((a, r) => a + r.score, 0)
   const max = results.reduce((a, r) => a + r.max, 0)
   const overall = isMyp ? mypGradeFromTotal(Math.round((total / max) * 32)) : percentToGrade((total / max) * 100, DEFAULT_DP_BOUNDARIES)
@@ -397,6 +456,7 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
 
   return {
     overall_grade: overall,
+    partial,
     summary,
     criteria: results.map((r) => ({ id: r.id, name: r.name, score: r.score, max: r.max, band: r.band, justification: r.justification, strengths: r.strengths, improvements: r.improvements })),
     next_steps: next,

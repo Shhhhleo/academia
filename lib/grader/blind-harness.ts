@@ -2,7 +2,9 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { gradeRequest } from "./rubrics"
-import { gradeTask } from "./score"
+import { featureVector, predict, ridge } from "./model"
+import { gradeTask, TRACE } from "./score"
+import { allCues, sections } from "./strands"
 
 /**
  * Harness for the blind test set: sample student work for every MYP and DP rubric at three levels, written and marked
@@ -11,10 +13,17 @@ import { gradeTask } from "./score"
 export interface Sample {
   set: string
   task: string
-  level: "strong" | "mid" | "weak"
+  level: "strong" | "good" | "mid" | "weak"
+  /** normal, padded (long but thin), mismatch (addresses only some of the criteria it is graded on) or slides (text from a slide deck). */
+  kind?: string
+  /** Full-length work, graded as it is. Without it the sample is a condensed piece, repeated up to its real length. */
+  asIs?: boolean
   criteria: string[]
   expect: Record<string, number>
   text: string
+  /** 1: short and condensed samples. 2: full-length work, including padded, mismatched and slide-deck pieces. */
+  round: number
+  file: string
 }
 
 interface SetInfo {
@@ -54,12 +63,18 @@ export const SETS: Record<string, SetInfo> = {
 }
 
 const dir = fileURLToPath(new URL("./samples", import.meta.url))
-export const samples: Sample[] = readdirSync(dir).flatMap((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as Sample[])
+export const samples: Sample[] = readdirSync(dir).flatMap((f) => (JSON.parse(readFileSync(join(dir, f), "utf8")) as Sample[]).map((s) => ({ ...s, round: f.startsWith("r2") ? 2 : 1, file: f })))
+
+/** The share of sections, across all the samples, in which each strand cue appears. Saved as cue-weights.json. */
+export function cueFrequencies() {
+  const all = samples.flatMap((s) => sections(s.text))
+  return Object.fromEntries(allCues().map(({ alt, re }) => [alt, Math.round((all.filter((x) => x.search(re) >= 0).length / all.length) * 1000) / 1000]))
+}
 
 export function grade(s: Sample) {
   const info = SETS[s.set]
   const words = s.text.split(/\s+/).length
-  const text = info.full ? Array.from({ length: Math.ceil(info.full / words) }, () => s.text).join("\n\n") : s.text
+  const text = info.full && !s.asIs ? Array.from({ length: Math.ceil(info.full / words) }, () => s.text).join("\n\n") : s.text
   const r = gradeTask(
     gradeRequest.parse({
       programme: info.programme,
@@ -81,7 +96,58 @@ export function grade(s: Sample) {
 }
 
 /** Every teacher mark in the set next to the grader's mark. */
-export const gradeAll = () => samples.flatMap((s) => grade(s).map((m) => ({ ...m, set: s.set, level: s.level })))
+export const gradeAll = () => samples.flatMap((s) => grade(s).map((m) => ({ ...m, set: s.set, level: s.level, kind: s.kind ?? "normal", round: s.round, file: s.file })))
 /** Within one mark on a short scale, or a fifth of a longer one. */
 export const close = (m: { got: number; want: number; max: number }) => Math.abs(m.got - m.want) <= Math.max(1, Math.floor(m.max * 0.2))
 export const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
+
+function traced(s: Sample, criteria = s.criteria) {
+  TRACE.length = 0
+  process.env.GRADER_TRACE = "1"
+  const marks = grade({ ...s, criteria })
+  delete process.env.GRADER_TRACE
+  return { marks, trace: [...TRACE] }
+}
+
+/** The kinds of criterion the model is trained for. Stories and custom rubrics keep the hand-written formula. */
+const GROUPS = ["language", "strand-content", "strand-organisation"]
+const round = (n: number, places: number) => Math.round(n * 10 ** places) / 10 ** places
+
+/** What the model is trained on: each teacher mark with the features of its criterion, and each criterion's background level. */
+export function trainingData() {
+  const levels: Record<string, number[]> = {}
+  const rows = samples.flatMap((s) => {
+    // Background level: how strongly a criterion shows in same-subject work that wasn't written for it.
+    if (s.kind !== "mismatch") for (const t of traced(s, []).trace) if (!s.criteria.includes(t.id)) (levels[t.key] ??= []).push(t.features.top)
+    const { marks, trace } = traced(s)
+    return marks.map((m) => {
+      const t = trace.find((x) => x.id === m.id)!
+      return { ...m, set: s.set, level: s.level, kind: s.kind ?? "normal", round: s.round, file: s.file, key: t.key, group: t.group, cap: t.cap, features: t.features }
+    })
+  })
+  const bg = Object.fromEntries(Object.entries(levels).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, round(mean(v), 3)]))
+  return { rows, bg, bgAll: round(mean(Object.values(levels).flat()), 3) }
+}
+type Data = ReturnType<typeof trainingData>
+
+/** Learns the weights for each kind of criterion from the given marks. */
+export function fit(data: Data, rows = data.rows) {
+  return Object.fromEntries(
+    GROUPS.flatMap((g) => {
+      const rs = rows.filter((r) => r.group === g)
+      if (rs.length < 20) return []
+      const weights = ridge(rs.map((r) => featureVector(r.features, data.bg[r.key] ?? data.bgAll)), rs.map((r) => r.want / r.max))
+      return [[g, weights.map((w) => round(w, 5))]]
+    }),
+  )
+}
+
+/** Marks from models that never saw the file being marked: each sample file is left out in turn. */
+export function crossValidate(data: Data) {
+  return [...new Set(data.rows.map((r) => r.file))].flatMap((file) => {
+    const groups = fit(data, data.rows.filter((r) => r.file !== file))
+    return data.rows
+      .filter((r) => r.file === file && groups[r.group])
+      .map((r) => ({ ...r, got: Math.round((predict(r.group, featureVector(r.features, data.bg[r.key] ?? data.bgAll), groups[r.group]) ?? 0) * r.cap * r.max) }))
+  })
+}
