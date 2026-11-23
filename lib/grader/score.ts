@@ -1,4 +1,5 @@
 import { DEFAULT_DP_BOUNDARIES, mypGradeFromTotal, percentToGrade } from "@/lib/grades"
+import { coverageFromMatch } from "./ai/meaning"
 import { builtInRubric, EXPECTED_WORDS, type CriterionResult, type GradeRequest, type GradeResult, type Kind, type Mode, type RubricCriterion } from "./rubrics"
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
@@ -311,10 +312,15 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
   const taskTerms = input.task?.trim() && mode !== "narrative" ? keywordsFrom(input.task, 20).filter((k) => !COMMAND_TERMS.has(k)).slice(0, 10) : []
   const taskWords = input.task?.toLowerCase().match(/[a-z]{5,}/g) ?? []
   const missedTask = taskTerms.filter((k) => ![...signals.tokens].some((t) => t.startsWith(k))).map((k) => taskWords.find((w) => w.startsWith(k)) ?? k)
-  // Off-task work loses up to 40% on content criteria; covering 70% of the task's terms counts as on task.
-  // With only one or two terms a single miss says little, so the penalty is capped at 15%.
-  const floor = taskTerms.length >= 3 ? 0.6 : 0.85
-  const taskFit = taskTerms.length ? floor + (1 - floor) * clamp((1 - missedTask.length / taskTerms.length) / 0.7) : 1
+  // Meaning match from the student's device: counts synonyms and judges stories too. The literal check stays a floor.
+  const meaning = input.task?.trim() && input.taskMatch !== undefined ? coverageFromMatch(input.taskMatch) : undefined
+  const literal = taskTerms.length ? 1 - missedTask.length / taskTerms.length : undefined
+  const coverage = meaning !== undefined ? Math.max(meaning, literal ?? 0) : literal
+  // Off-task work loses up to 40% on content criteria (25% for stories, whose match is fuzzier).
+  // Without the meaning model: covering 70% of the task's terms counts as on task, and one or two terms cap the loss at 15%.
+  const floor = mode === "narrative" ? 0.75 : meaning !== undefined || taskTerms.length >= 3 ? 0.6 : 0.85
+  const taskFit = coverage === undefined ? 1 : floor + (1 - floor) * (meaning !== undefined ? coverage : clamp(coverage / 0.7))
+  const offTask = meaning !== undefined ? coverage! < 0.25 : missedTask.length >= 2 && missedTask.length > taskTerms.length / 2
   const results = criteria.map((cr) => scoreCriterion(cr, signals, expected, isMyp && cr.max === 8, taskFit, mode, judgeByType, descriptive))
   const total = results.reduce((a, r) => a + r.score, 0)
   const max = results.reduce((a, r) => a + r.max, 0)
@@ -322,11 +328,20 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
 
   const ranked = [...results].sort((a, b) => a.fraction - b.fraction)
   const improvements = ranked.flatMap((r) => r.improvements)
-  if (missedTask.length >= 2 && missedTask.length > taskTerms.length / 2) {
-    improvements.unshift(`Answer the task directly: it asks about ${missedTask.slice(0, 4).join(", ")}, which your work barely mentions.`)
+  if (offTask) {
+    improvements.unshift(
+      missedTask.length
+        ? `Answer the task directly: it asks about ${missedTask.slice(0, 4).join(", ")}, which your work barely mentions.`
+        : `Answer the task directly: your work doesn't seem to respond to "${input.task!.trim().slice(0, 120)}".`,
+    )
   }
   const next = [...new Set(improvements)].slice(0, 5)
-  const taskLine = taskTerms.length ? ` Task fit: ${taskTerms.length - missedTask.length} of ${taskTerms.length} key terms from the task appear.` : ""
+  const taskLine =
+    meaning !== undefined
+      ? ` Task fit: ${coverage! >= 0.7 ? "strong" : coverage! >= 0.35 ? "partial" : "weak"} match in meaning with the task.`
+      : taskTerms.length
+        ? ` Task fit: ${taskTerms.length - missedTask.length} of ${taskTerms.length} key terms from the task appear.`
+        : ""
   const summary =
     signals.words < 20
       ? "There isn't enough text to grade. Upload the full piece of work or paste it in."
@@ -338,5 +353,6 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
     criteria: results.map((r) => ({ id: r.id, name: r.name, score: r.score, max: r.max, band: r.band, justification: r.justification, strengths: r.strengths, improvements: r.improvements })),
     next_steps: next,
     caveats: caveats.join(" "),
+    mode,
   }
 }

@@ -4,16 +4,20 @@ const isDev = process.env.NODE_ENV !== "production"
 const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://*.supabase.co"
 const supabaseWs = supabase.replace(/^https:/, "wss:")
 
-// Static CSP (no nonces) so marketing pages stay statically rendered. Scripts are same-origin only;
+// The Task Grader's on-device AI (open-source models run in the browser): model files come from Hugging Face,
+// the ONNX Runtime engine from jsDelivr, the engine is WebAssembly, and workers start from a blob: bootstrap script.
+const onDeviceAi = "https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.jsdelivr.net"
+
+// Static CSP (no nonces) so marketing pages stay statically rendered. Scripts are same-origin only, plus the AI engine;
 // 'unsafe-inline' covers Next's inline bootstrap and the theme/preference scripts.
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  `connect-src 'self' ${supabase} ${supabaseWs}${isDev ? " ws: http://localhost:*" : ""}`,
+  `connect-src 'self' ${supabase} ${supabaseWs} ${onDeviceAi}${isDev ? " ws: http://localhost:*" : ""}`,
   "worker-src 'self' blob:",
   "frame-src 'none'",
   "frame-ancestors 'none'",

@@ -306,6 +306,8 @@ export const gradeRequest = z.object({
   /** Comma-separated criterion ids the task assesses, e.g. "A,C". Empty: all. */
   criteria: z.string().max(100).optional(),
   mode: z.enum(["analytical", "narrative", "persuasive", "informative"]).optional(),
+  /** Best task-to-paragraph similarity, measured by the meaning model on the student's device. */
+  taskMatch: z.coerce.number().min(-1).max(1).optional(),
   text: z.string().max(200_000).optional(),
 })
 export type GradeRequest = z.infer<typeof gradeRequest>
@@ -327,4 +329,6 @@ export interface GradeResult {
   criteria: CriterionResult[]
   next_steps: string[]
   caveats: string
+  /** The type of writing it was marked as. */
+  mode: Mode
 }
