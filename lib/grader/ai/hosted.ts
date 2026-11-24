@@ -71,7 +71,8 @@ export function readHostedAnswer(content: string, criteria: MarkInput["criteria"
   if (!parsed.success) return null
   const marks: Record<string, Mark> = {}
   for (const c of criteria) {
-    const got = parsed.data.criteria.find((x) => x.id.trim().toUpperCase() === c.id.toUpperCase())
+    // The model sometimes writes "Criterion A" for "A".
+    const got = parsed.data.criteria.find((x) => x.id.trim().toUpperCase().replace(/^CRITERION\s+/, "") === c.id.toUpperCase())
     if (got) marks[c.id] = { score: Math.round((Math.min(8, Math.max(0, Math.round(got.mark))) / 8) * c.max), why: got.why.trim(), improve: got.improve.trim() }
   }
   return Object.keys(marks).length ? marks : null
@@ -81,7 +82,7 @@ export type HostedResult = { ok: true; marks: Record<string, Mark> } | { ok: fal
 
 /** Sends the work to the hosted model and returns its marks. "busy" means the free allowance is used up for now. */
 export async function markHosted(input: MarkInput, apiKey: string, fetcher: typeof fetch = fetch): Promise<HostedResult> {
-  const item = { type: "object", properties: { id: { type: "string" }, why: { type: "string" }, improve: { type: "string" }, mark: { type: "integer" } }, required: ["id", "why", "improve", "mark"], additionalProperties: false }
+  const item = { type: "object", properties: { id: { type: "string", enum: input.criteria.map((c) => c.id) }, why: { type: "string" }, improve: { type: "string" }, mark: { type: "integer" } }, required: ["id", "why", "improve", "mark"], additionalProperties: false }
   try {
     const res = await fetcher(ENDPOINT, {
       method: "POST",

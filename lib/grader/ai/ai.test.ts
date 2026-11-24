@@ -222,6 +222,13 @@ describe("hosted marking (no download)", () => {
     expect(sent?.headers.Authorization).toBe("Bearer test-key")
     expect(sent?.body.model).toBe(HOSTED_MODEL)
     expect(sent?.body.response_format.type).toBe("json_schema")
+    // The model may only label a mark with a criterion asked about, so "Criterion A" can't come back.
+    expect(sent?.body).toMatchObject({ response_format: { json_schema: { schema: { properties: { criteria: { items: { properties: { id: { enum: ["A", "B"] } } } } } } } } })
+  })
+
+  it('reads a mark labelled "Criterion A" as Criterion A', () => {
+    const labelled = { criteria: [{ id: "Criterion A", why: "Thin critique.", improve: "Analyse one work.", mark: 4 }] }
+    expect(readHostedAnswer(JSON.stringify(labelled), input.criteria)).toEqual({ A: { score: 4, why: "Thin critique.", improve: "Analyse one work." } })
   })
 
   it("reports a used-up allowance as busy, with when to try again, and anything else as failed", async () => {
