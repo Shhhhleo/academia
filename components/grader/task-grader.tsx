@@ -565,7 +565,7 @@ function Evaluation({ result, markInput, marker }: { result: GradeResult; markIn
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
             <div>
               <h2 className="text-base font-semibold">{result.partial ? "Your mark" : "Your grade"}</h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">{waiting ? "Being marked now" : byAi ? MARKED_BY[marker] : MARKED_BY.checklist}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{waiting ? "Being marked now" : byAi ? MARKED_BY[marker] : marker !== "checklist" && ai.settled ? "Not marked by the AI: this is a checklist estimate" : MARKED_BY.checklist}</p>
             </div>
             {waiting ? (
               <Loader2 className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Being marked" />
