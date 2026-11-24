@@ -24,27 +24,34 @@ export function workForMarking(text: string) {
 
 const NUMERALS = ["i", "ii", "iii", "iv", "v", "vi"]
 
+// Shared by the on-device and the hosted marker.
+export const student = (input: MarkInput) => (input.programme === "MYP" ? `an MYP Year ${input.year}` : "a Diploma Programme")
+export const STRICT =
+  "You give the mark a moderator would agree with. Be strict: long, fluent or well-referenced work is not automatically good. Judge the depth, accuracy and relevance of the thinking, and whether each part really does what the criterion asks."
+export const LEVELS = `Levels:
+1-2 limited: lists a few facts or steps with little explanation; mostly description; gaps or errors
+3-4 adequate: covers the main points with some explanation, but parts are thin, generic, descriptive or not linked together
+5-6 substantial: detailed and mostly accurate, explains reasons and effects, clearly linked to the task or statement of inquiry, with some depth missing
+7-8 excellent: thorough, accurate and insightful throughout, precise subject vocabulary, every part justified and linked to the task or statement of inquiry`
+/** What a criterion asks for, as the numbered strands of the rubric. */
+export const strands = (asks: string[]) => asks.map((a, i) => `${NUMERALS[i] ?? i + 1}. ${a}`).join("\n")
+
 /**
  * Chat messages asking the on-device model to mark the work on one criterion.
  * Every criterion is marked on the MYP's 0–8 scale (two marks per level) and scaled to its own maximum by parseMark.
  */
 export function buildMarkMessages(input: MarkInput, criterion: MarkInput["criteria"][number]): ChatMessage[] {
-  const student = input.programme === "MYP" ? `an MYP Year ${input.year}` : "a Diploma Programme"
-  const asks = criterion.asks.length ? ` The student should:\n${criterion.asks.map((a, i) => `${NUMERALS[i] ?? i + 1}. ${a}`).join("\n")}` : ""
+  const asks = criterion.asks.length ? ` The student should:\n${strands(criterion.asks)}` : ""
   return [
     {
       role: "system",
-      content: `You are an experienced IB ${input.subjectName} teacher marking ${student} student's work against one criterion. You give the mark a moderator would agree with. Be strict: long, fluent or well-referenced work is not automatically good. Judge the depth, accuracy and relevance of the thinking, and whether each part really does what the criterion asks.`,
+      content: `You are an experienced IB ${input.subjectName} teacher marking ${student(input)} student's work against one criterion. ${STRICT}`,
     },
     {
       role: "user",
       content: `Criterion ${criterion.id}: ${criterion.name} (0 to 8).${asks}
 ${input.task?.trim() ? `\nThe task was: ${input.task.trim()}\n` : ""}
-Levels:
-1-2 limited: lists a few facts or steps with little explanation; mostly description; gaps or errors
-3-4 adequate: covers the main points with some explanation, but parts are thin, generic, descriptive or not linked together
-5-6 substantial: detailed and mostly accurate, explains reasons and effects, clearly linked to the task or statement of inquiry, with some depth missing
-7-8 excellent: thorough, accurate and insightful throughout, precise subject vocabulary, every part justified and linked to the task or statement of inquiry
+${LEVELS}
 
 The student's work (${input.taskType}):
 """

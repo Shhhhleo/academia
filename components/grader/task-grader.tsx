@@ -11,9 +11,10 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
-import { AiPanel, useAiMarks } from "@/components/grader/ai-marker"
+import { MarkerChoice, MarkerStatus, readMarker, useAiMarks, writeMarker, type Marker } from "@/components/grader/ai-marker"
+import { useMounted } from "@/hooks/use-mounted"
 import { matchTask } from "@/lib/grader/ai/client"
-import { parseMark, type MarkInput } from "@/lib/grader/ai/prompt"
+import type { MarkInput } from "@/lib/grader/ai/prompt"
 import { builtInRubric, isLanguageGroup, taskExample, taskTypesFor, WRITING_MODES, type GradeResult, type TaskType } from "@/lib/grader/rubrics"
 import { DEFAULT_DP_BOUNDARIES, mypGradeFromTotal, percentToGrade } from "@/lib/grades"
 import { SUBJECT_GROUPS } from "@/lib/ib"
@@ -68,8 +69,12 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   )
 }
 
-export function TaskGrader() {
+export function TaskGrader({ hostedAi }: { hostedAi: boolean }) {
   const { subjects, profile } = useShell()
+  // The saved choice is read after hydration: the server doesn't know it.
+  const mounted = useMounted()
+  const [chosen, setChosen] = useState<Marker | null>(null)
+  const marker = chosen ?? (mounted ? readMarker(hostedAi) : hostedAi ? "hosted" : "checklist")
   const [subjectId, setSubjectId] = useState(subjects[0]?.id ?? OTHER)
   const subject = subjects.find((s) => s.id === subjectId)
   const [programme, setProgramme] = useState<"MYP" | "DP">(profile.programme)
@@ -420,6 +425,14 @@ export function TaskGrader() {
                 {error}
               </p>
             )}
+            <MarkerChoice
+              value={marker}
+              hostedAi={hostedAi}
+              onChange={(next) => {
+                writeMarker(next)
+                setChosen(next)
+              }}
+            />
             <Button type="submit" size="lg" className="h-11 w-full" disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}
               {stage ? STAGE_TEXT[stage] : "Grade my task"}
@@ -435,7 +448,7 @@ export function TaskGrader() {
             )}
             <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
               <Lock className="size-3" aria-hidden="true" />
-              Your work is read on your device and never saved.
+              Academia never saves your work.
             </p>
           </div>
         </form>
@@ -443,7 +456,7 @@ export function TaskGrader() {
 
       <div className="lg:col-span-3" aria-live="polite">
         {result ? (
-          <Evaluation key={gradeNo} result={result} markInput={feedback} />
+          <Evaluation key={`${gradeNo}:${marker}`} result={result} markInput={feedback} marker={marker} />
         ) : (
           <Panel>
             <div className="grid gap-5 py-6">
@@ -489,83 +502,148 @@ function List({ title, items }: { title: string; items: string[] }) {
   )
 }
 
-function Evaluation({ result, markInput }: { result: GradeResult; markInput: MarkInput | null }) {
-  const ai = useAiMarks(markInput)
-  // With the on-device AI on, its mark and comment replace the checklist estimate for each criterion it can mark.
+const BANDS = ["Limited", "Adequate", "Substantial", "Excellent"]
+
+/**
+ * The mark shown the way an IB rubric is laid out: four achievement levels across the scale, filled up to the mark,
+ * with the level reached named. On the MYP's 0–8 scale each level is two marks.
+ */
+function BandRuler({ score, max }: { score: number; max: number }) {
+  const size = max / 4
+  // Whole marks per level show as separate cells; other scales fill each level in proportion.
+  const cells = Number.isInteger(size) && size <= 3 ? size : 1
+  const reached = score <= 0 ? -1 : Math.min(3, Math.ceil(score / size) - 1)
+  return (
+    <div role="img" aria-label={`${score} out of ${max}${reached >= 0 ? `: ${BANDS[reached].toLowerCase()}` : ""}`}>
+      <div className="grid grid-cols-4 gap-1.5">
+        {BANDS.map((name, band) => (
+          <div key={name} className="grid gap-1.5">
+            <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${cells}, minmax(0, 1fr))` }}>
+              {Array.from({ length: cells }, (_, cell) => {
+                const start = band * size + (cell * size) / cells
+                const fill = Math.min(1, Math.max(0, (score - start) / (size / cells)))
+                return (
+                  <div key={cell} className="h-2.5 overflow-hidden rounded-sm bg-muted">
+                    <div className="h-full bg-primary" style={{ width: `${fill * 100}%` }} />
+                  </div>
+                )
+              })}
+            </div>
+            <span className={cn("text-xs leading-tight", band === reached ? "font-medium text-foreground" : "text-muted-foreground")}>{name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const MARKED_BY: Record<Marker, string> = {
+  hosted: "Marked by an open-source AI",
+  device: "Marked by the AI on this device",
+  checklist: "Estimated from a checklist",
+}
+
+function Evaluation({ result, markInput, marker }: { result: GradeResult; markInput: MarkInput | null; marker: Marker }) {
+  const ai = useAiMarks(markInput, marker)
+  // An AI's mark and comment replace the checklist estimate for each criterion it marked.
   const criteria = result.criteria.map((c) => {
-    const reply = ai.on ? ai.replies[c.id] : undefined
-    const marked = reply === undefined ? null : parseMark(reply, c.max)
-    const byAi = marked?.score != null
-    return { ...c, score: marked?.score ?? c.score, marked: byAi ? marked : null, waiting: ai.on && !ai.settled && !!c.asks && !byAi }
+    const mark = ai.marks[c.id]
+    const marked = mark?.score != null ? mark : null
+    return { ...c, score: marked?.score ?? c.score, marked, waiting: ai.on && !ai.settled && !!c.asks && !marked }
   })
   const waiting = criteria.some((c) => c.waiting)
   const byAi = criteria.some((c) => c.marked)
   const total = criteria.reduce((a, c) => a + c.score, 0)
   const max = criteria.reduce((a, c) => a + c.max, 0)
   const grade = !byAi ? result.overall_grade : markInput?.programme === "MYP" ? mypGradeFromTotal(Math.round((total / max) * 32)) : percentToGrade((total / max) * 100, DEFAULT_DP_BOUNDARIES)
-  const summary = byAi
-    ? `Marked by the on-device AI: ${criteria.map((c) => `${c.name} ${c.score}/${c.max}${c.marked ? "" : " (checklist estimate)"}`).join(", ")}.`
-    : result.summary
+  const estimated = criteria.filter((c) => !c.marked)
   return (
     <div className="grid gap-4">
       {/* A 1–7 grade needs every criterion. With only some ticked, show the marks (out of 8 each in the MYP). */}
-      <Panel title={`${byAi || waiting ? "AI" : "Estimated"} ${result.partial ? "mark" : "grade"}`}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          {waiting ? (
-            <Loader2 className="size-10 animate-spin text-muted-foreground" aria-hidden="true" />
-          ) : result.partial ? (
-            <span className="inline-flex items-baseline gap-0.5 font-mono font-semibold tracking-tight tabular-nums">
-              <span className="text-7xl">{total}</span>
-              <span className="text-sm font-medium text-muted-foreground">/{max}</span>
-            </span>
-          ) : (
-            <div className="grid justify-items-start gap-1">
-              <GradeNumber grade={grade} size="xl" />
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {total}/{max} marks
-              </span>
+      <Panel>
+        <div className="grid gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+            <div>
+              <h2 className="text-base font-semibold">{result.partial ? "Your mark" : "Your grade"}</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">{waiting ? "Being marked now" : byAi ? MARKED_BY[marker] : MARKED_BY.checklist}</p>
             </div>
+            {waiting ? (
+              <Loader2 className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Being marked" />
+            ) : result.partial ? (
+              <span className="inline-flex items-baseline gap-0.5 font-mono font-semibold tracking-tight tabular-nums">
+                <span className="text-6xl leading-none">{total}</span>
+                <span className="text-base font-medium text-muted-foreground">/{max}</span>
+              </span>
+            ) : (
+              <div className="flex items-end gap-3">
+                <GradeNumber grade={grade} size="xl" />
+                <span className="pb-1 text-sm text-muted-foreground tabular-nums">
+                  {total}/{max} marks
+                </span>
+              </div>
+            )}
+          </div>
+          {!waiting && (
+            <p className="text-sm">
+              {byAi
+                ? estimated.length
+                  ? `The AI couldn't mark ${estimated.map((c) => c.name).join(" or ")} from written work, so ${estimated.length === 1 ? "that mark is a checklist estimate" : "those marks are checklist estimates"}.`
+                  : "An AI marker is usually close but can be a mark or two out, so read its reasons below against your work."
+                : result.summary}
+            </p>
           )}
-          <p className="text-sm">{waiting ? "The AI is reading and marking your work. Each mark appears below as soon as it is ready." : summary}</p>
+          <MarkerStatus ai={ai} />
         </div>
       </Panel>
 
-      <AiPanel ai={ai} />
-
       {criteria.map((c) => (
-        <Panel
-          key={c.id}
-          title={`Criterion ${c.id}: ${c.name}`}
-          action={
-            c.waiting ? (
-              <Loader2 className="size-5 animate-spin text-muted-foreground" aria-label="Waiting for the AI" />
-            ) : (
-              <span className="font-mono text-lg font-semibold tabular">{c.score}<span className="text-sm text-muted-foreground">/{c.max}</span></span>
-            )
-          }
-        >
-          {c.waiting ? (
-            <p className="text-sm text-muted-foreground">Waiting for the AI&apos;s mark…</p>
-          ) : (
-            <div className="grid gap-3">
-              <div className="h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${c.score} out of ${c.max}`}>
-                <div className="h-full rounded-full bg-primary" style={{ width: `${c.max ? Math.min(100, (c.score / c.max) * 100) : 0}%` }} />
-              </div>
-              {c.marked ? (
-                // The AI read the work, so its comment replaces the checklist's band line and lists.
-                <>
-                  {c.marked.why && <p className="text-sm">{c.marked.why}</p>}
-                  {c.marked.improve && <p className="text-sm"><span className="font-medium">To improve: </span>{c.marked.improve}</p>}
-                </>
+        <Panel key={c.id}>
+          <div className="grid gap-4">
+            <div className="flex items-start justify-between gap-4">
+              <h3 className="flex items-center gap-2.5 text-base font-semibold">
+                <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 font-mono text-sm text-primary" aria-hidden="true">
+                  {c.id}
+                </span>
+                <span>
+                  <span className="sr-only">Criterion {c.id}: </span>
+                  {c.name}
+                </span>
+              </h3>
+              {c.waiting ? (
+                <Loader2 className="size-5 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Being marked" />
               ) : (
-                <>
-                  <p className="text-sm"><span className="font-medium">Band {c.band}.</span> {c.justification}</p>
-                  <List title="Strengths" items={c.strengths} />
-                  <List title="To improve" items={c.improvements} />
-                </>
+                <span className="font-mono text-xl leading-7 font-semibold tabular-nums">
+                  {c.score}
+                  <span className="text-sm font-medium text-muted-foreground">/{c.max}</span>
+                </span>
               )}
             </div>
-          )}
+            {c.waiting ? (
+              <p className="text-sm text-muted-foreground">The AI hasn&apos;t marked this yet.</p>
+            ) : (
+              <>
+                <BandRuler score={c.score} max={c.max} />
+                {c.marked ? (
+                  // The AI read the work, so its reasons replace the checklist's band line and lists.
+                  <div className="grid gap-2 text-sm leading-relaxed">
+                    {c.marked.why && <p>{c.marked.why}</p>}
+                    {c.marked.improve && (
+                      <p className="border-l-2 border-primary pl-3">
+                        <span className="font-medium">To improve: </span>
+                        {c.marked.improve}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    <p className="text-sm">{c.justification}</p>
+                    <List title="Strengths" items={c.strengths} />
+                    <List title="To improve" items={c.improvements} />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </Panel>
       ))}
 

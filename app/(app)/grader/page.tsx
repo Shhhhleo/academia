@@ -15,7 +15,8 @@ export default async function GraderPage({ searchParams }: PageProps<"/grader">)
         description="Upload an assessment, worksheet, essay or any document and get it graded against the IB criteria for your subject and year, with feedback on how to reach the next band."
       />
       <MaintenanceGate feature="grader" preview={preview}>
-        <TaskGrader />
+        {/* The AI marker is offered when its key is set on the server. */}
+        <TaskGrader hostedAi={Boolean(process.env.GROQ_API_KEY)} />
       </MaintenanceGate>
     </>
   )
