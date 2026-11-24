@@ -1,5 +1,6 @@
 // Runs open-source models on the student's device (Web Worker), so the page stays responsive and nothing leaves the browser.
 import { env, InterruptableStoppingCriteria, pipeline, TextStreamer, type DynamicCache } from "@huggingface/transformers"
+import { folderCache, savedFolder } from "./folder"
 import { CHAT_MODEL, EMBED_MODEL, type WorkerRequest, type WorkerResponse } from "./protocol"
 
 env.allowLocalModels = false
@@ -48,8 +49,16 @@ ctx.onmessage = (event) => {
   queue = queue.then(() => handle(req))
 }
 
+/** Models are kept in the folder the student chose, when there is one and the browser still allows it; otherwise in the browser's own storage. */
+async function applyChosenFolder() {
+  const folder = await savedFolder()
+  env.useCustomCache = !!folder?.granted
+  env.customCache = folder?.granted ? folderCache(folder.handle) : null
+}
+
 async function handle(req: Exclude<WorkerRequest, { type: "cancel" }>) {
   try {
+    await applyChosenFolder()
     if (req.type === "embed") {
       embedder ??= loadEmbedder()
       const embed = await embedder

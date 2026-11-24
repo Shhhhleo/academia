@@ -3,6 +3,7 @@ import { gradeRequest } from "../rubrics"
 import { narrativeStrong, narrativeWeak } from "../fixtures"
 import { gradeTask } from "../score"
 import { chunkText, cosine, coverageFromMatch } from "./meaning"
+import { cachePath, folderCache } from "./folder"
 import { buildMarkMessages, MARK_PREFILL, parseMark, workForMarking } from "./prompt"
 
 const req = (o: Record<string, string>) =>
@@ -110,5 +111,63 @@ describe("on-device marking prompt", () => {
   it("tells the marker what each criterion asks for, except those judged from a performance", () => {
     const arts = gradeTask(req({ subjectName: "Visual Arts", subjectGroup: "Arts", criteria: "A,C" }), narrativeStrong)
     expect(arts.criteria.map((c) => c.asks)).toEqual([["investigate a movement or genre", "critique an artwork or performance from it"], undefined])
+  })
+})
+
+describe("keeping the models in a folder the student chose", () => {
+  // A stand-in for the browser's folder handle: folders and files in memory. Like the browser, it makes an empty file as soon as one is asked for, and a write only lands on close.
+  type Dir = { dirs: Record<string, Dir>; files: Record<string, Blob> }
+  const dir = (): Dir => ({ dirs: {}, files: {} })
+  const missing = () => new DOMException("not found", "NotFoundError")
+  const handle = (d: Dir): FileSystemDirectoryHandle =>
+    ({
+      async getDirectoryHandle(name: string, options?: { create?: boolean }) {
+        if (!d.dirs[name] && !options?.create) throw missing()
+        return handle((d.dirs[name] ??= dir()))
+      },
+      async getFileHandle(name: string, options?: { create?: boolean }) {
+        if (!d.files[name] && !options?.create) throw missing()
+        d.files[name] ??= new Blob([])
+        return {
+          getFile: async () => d.files[name],
+          createWritable: async () => {
+            const chunks: BlobPart[] = []
+            return new WritableStream<Uint8Array>({ write: (chunk) => void chunks.push(chunk.slice()), close: () => void (d.files[name] = new Blob(chunks)) })
+          },
+        }
+      },
+      removeEntry: async (name: string) => void delete d.files[name],
+    }) as unknown as FileSystemDirectoryHandle
+
+  const url = "https://huggingface.co/onnx-community/Qwen3-4B-ONNX/resolve/main/onnx/model_q4f16.onnx"
+
+  it("lays files out by the address they came from, with names every system accepts", () => {
+    expect(cachePath(url)).toEqual(["Academia AI models", "huggingface.co", "onnx-community", "Qwen3-4B-ONNX", "resolve", "main", "onnx", "model_q4f16.onnx"])
+    expect(cachePath("/models/../a:b/c?.json")).toEqual(["Academia AI models", "models", "a_b", "c_.json"])
+  })
+
+  it("saves a download and reads it back, and reports what isn't there yet", async () => {
+    const root = dir()
+    const cache = folderCache(handle(root))
+    expect(await cache.match(url)).toBeUndefined()
+    await cache.put(url, new Response(new Uint8Array([1, 2, 3, 4])))
+    const hit = await cache.match(url)
+    expect(hit?.headers.get("content-length")).toBe("4")
+    expect([...new Uint8Array(await hit!.arrayBuffer())]).toEqual([1, 2, 3, 4])
+    expect(Object.keys(root.dirs)).toEqual(["Academia AI models"])
+  })
+
+  it("leaves nothing behind when a download stops halfway", async () => {
+    const root = dir()
+    const cache = folderCache(handle(root))
+    const broken = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]))
+        controller.error(new Error("connection lost"))
+      },
+    })
+    await expect(cache.put(url, new Response(broken))).rejects.toThrow("connection lost")
+    expect(await cache.match(url)).toBeUndefined()
+    expect(root.dirs["Academia AI models"].dirs["huggingface.co"].dirs["onnx-community"].dirs["Qwen3-4B-ONNX"].dirs.resolve.dirs.main.dirs.onnx.files).toEqual({})
   })
 })

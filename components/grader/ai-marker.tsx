@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Cpu, Loader2 } from "lucide-react"
+import { Cpu, FolderOpen, Loader2 } from "lucide-react"
 import { Panel } from "@/components/app/page-header"
 import { Button } from "@/components/ui/button"
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress"
 import { deviceSupport, generate, type Support } from "@/lib/grader/ai/client"
+import { allowFolder, canChooseFolder, chooseFolder, forgetFolder, savedFolder, type SavedFolder } from "@/lib/grader/ai/folder"
 import { buildMarkMessages, MARK_PREFILL, MARK_TOKENS, workForMarking, type MarkInput } from "@/lib/grader/ai/prompt"
 import { CHAT_MODEL_MB } from "@/lib/grader/ai/protocol"
 
@@ -51,13 +52,18 @@ export function useAiMarks(input: MarkInput | null) {
   const [phase, setPhase] = useState<Phase>({ kind: "starting" })
   /** The model's answer so far for each criterion it has started on. */
   const [replies, setReplies] = useState<Record<string, string>>({})
+  /** The folder the student keeps the model in: null for the browser's own storage, undefined while that is being looked up. */
+  const [folder, setFolder] = useState<SavedFolder | null | undefined>(undefined)
+  // The browser may ask again before a chosen folder can be used, and only a click can answer it.
+  const needsAccess = !!folder && !folder.granted
 
   useEffect(() => {
     deviceSupport().then(setSupport)
+    savedFolder().then(setFolder)
   }, [])
 
   useEffect(() => {
-    if (!enabled || !support?.ok || !input) return
+    if (!enabled || !support?.ok || !input || folder === undefined || needsAccess) return
     // Aborting also tells the worker to stop, so the next grade isn't queued behind this one.
     const abort = new AbortController()
     const run = async () => {
@@ -86,9 +92,9 @@ export function useAiMarks(input: MarkInput | null) {
       if (!abort.signal.aborted) setPhase({ kind: "error", message: friendly(err.message) })
     })
     return () => abort.abort()
-  }, [enabled, support, input])
+  }, [enabled, support, input, folder, needsAccess])
 
-  const on = enabled && !!support?.ok && !!input
+  const on = enabled && !!support?.ok && !!input && !needsAccess
   return {
     input,
     support,
@@ -99,6 +105,19 @@ export function useAiMarks(input: MarkInput | null) {
     on,
     /** No more answers are coming. */
     settled: phase.kind === "done" || phase.kind === "error",
+    folder,
+    needsAccess,
+    async pickFolder() {
+      const picked = await chooseFolder()
+      if (picked) setFolder(picked)
+    },
+    async allowFolder() {
+      if (folder) setFolder(await allowFolder(folder))
+    },
+    async keepInBrowser() {
+      await forgetFolder()
+      setFolder(null)
+    },
     setEnabled(next: boolean) {
       writePref(next)
       // Turning it back on marks again from the start.
@@ -107,6 +126,35 @@ export function useAiMarks(input: MarkInput | null) {
       setEnabled(next)
     },
   }
+}
+
+/** Where the model is kept, with the choice of a folder where the browser offers one (Chrome and Edge on a computer). */
+function ModelPlace({ ai }: { ai: ReturnType<typeof useAiMarks> }) {
+  if (!canChooseFolder() || ai.folder === undefined) return null
+  return (
+    <div className="grid gap-2 rounded-lg border p-3 text-xs">
+      <p className="text-muted-foreground">
+        {ai.folder ? (
+          <>
+            The model is kept in your folder <span className="font-medium text-foreground">{ai.folder.name}</span>.
+          </>
+        ) : (
+          "The model is kept in your browser's own storage, on the drive your browser is installed on (usually C:). Short of space there? Keep it in a folder on another drive."
+        )}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={ai.pickFolder}>
+          <FolderOpen className="size-4" aria-hidden="true" />
+          {ai.folder ? "Change folder" : "Choose a folder"}
+        </Button>
+        {ai.folder && (
+          <Button variant="ghost" onClick={ai.keepInBrowser}>
+            Use the browser&apos;s storage
+          </Button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /** The on-device AI's opt-in, progress and caveats. */
@@ -128,10 +176,26 @@ export function AiPanel({ ai }: { ai: ReturnType<typeof useAiMarks> }) {
           <p className="text-xs text-muted-foreground">
             The first time, your browser downloads the model (about {(CHAT_MODEL_MB / 1000).toFixed(1)} GB, so use Wi-Fi and keep 3 GB of disk space free) and keeps it for next time. After that, each mark takes about a minute on a laptop with a graphics chip, and its comment a few minutes more for long work.
           </p>
+          <ModelPlace ai={ai} />
           <Button className="w-fit" onClick={() => ai.setEnabled(true)}>
             <Cpu className="size-4" aria-hidden="true" />
             Turn on AI marking
           </Button>
+        </div>
+      ) : ai.needsAccess ? (
+        <div className="grid gap-3">
+          <p className="text-sm">
+            Your browser needs your OK before it can use your model folder <span className="font-medium">{ai.folder?.name}</span> again. The marks here are estimates from a checklist until then.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={ai.allowFolder}>
+              <FolderOpen className="size-4" aria-hidden="true" />
+              Allow access
+            </Button>
+            <Button variant="ghost" onClick={ai.keepInBrowser}>
+              Use the browser&apos;s storage
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="grid gap-3">
