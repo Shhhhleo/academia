@@ -16,8 +16,9 @@ function getWorker() {
   return worker
 }
 
-function call(req: Request, onMessage?: (message: WorkerResponse) => void) {
+function call(req: Request, onMessage?: (message: WorkerResponse) => void, signal?: AbortSignal) {
   const id = nextId++
+  signal?.addEventListener("abort", () => getWorker().postMessage({ id, type: "cancel" }), { once: true })
   return new Promise<Extract<WorkerResponse, { type: "done" }>>((resolve, reject) => {
     listeners.set(id, (message) => {
       if (message.type === "done") resolve(message)
@@ -29,9 +30,9 @@ function call(req: Request, onMessage?: (message: WorkerResponse) => void) {
   })
 }
 
-export type Support = { ok: true; fp16: boolean } | { ok: false; reason: string }
+export type Support = { ok: true } | { ok: false; reason: string }
 
-/** Whether this device can run the on-device feedback model (WebGPU and enough memory). */
+/** Whether this device can run the on-device marking model (WebGPU with half precision, and enough memory). */
 export async function deviceSupport(): Promise<Support> {
   type Adapter = { features: ReadonlySet<string> }
   const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<Adapter | null> } }).gpu
@@ -39,8 +40,10 @@ export async function deviceSupport(): Promise<Support> {
   const adapter = await gpu.requestAdapter().catch(() => null)
   if (!adapter) return { ok: false, reason: "This device's graphics chip isn't available to the browser, so the on-device AI can't run here." }
   const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
-  if (memory !== undefined && memory < 4) return { ok: false, reason: "This device has too little memory for the on-device AI." }
-  return { ok: true, fp16: adapter.features.has("shader-f16") }
+  if (memory !== undefined && memory < 8) return { ok: false, reason: "This device has too little memory for the on-device AI." }
+  // The model's only browser build stores its numbers in half precision.
+  if (!adapter.features.has("shader-f16")) return { ok: false, reason: "This device's graphics chip is too old for the on-device AI." }
+  return { ok: true }
 }
 
 /**
@@ -58,15 +61,24 @@ export async function matchTask(task: string, text: string, timeoutMs = 20_000):
   return Promise.race([run, timeout]).catch(() => null)
 }
 
-/** Streams feedback from the on-device model; the first run downloads it (progress in bytes). */
-export function generateFeedback(
+/**
+ * Streams the on-device model's answer, which continues `prefill`. The first run downloads the model (progress in bytes);
+ * then it reads the prompt (reading, in tokens) and writes (token). Aborting `signal` stops it.
+ */
+export function generate(
   messages: ChatMessage[],
+  prefill: string,
   maxTokens: number,
-  fp16: boolean,
-  on: { progress?: (loaded: number, total: number) => void; token?: (text: string) => void },
+  on: { progress?: (loaded: number, total: number) => void; reading?: (done: number, total: number) => void; token?: (text: string) => void },
+  signal?: AbortSignal,
 ) {
-  return call({ type: "generate", messages, maxTokens, fp16 }, (message) => {
-    if (message.type === "progress") on.progress?.(message.loaded, message.total)
-    else if (message.type === "token") on.token?.(message.text)
-  })
+  return call(
+    { type: "generate", messages, prefill, maxTokens },
+    (message) => {
+      if (message.type === "progress") on.progress?.(message.loaded, message.total)
+      else if (message.type === "reading") on.reading?.(message.done, message.total)
+      else if (message.type === "token") on.token?.(message.text)
+    },
+    signal,
+  )
 }
