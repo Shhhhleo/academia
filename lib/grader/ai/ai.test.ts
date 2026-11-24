@@ -4,6 +4,7 @@ import { narrativeStrong, narrativeWeak } from "../fixtures"
 import { gradeTask } from "../score"
 import { chunkText, cosine, coverageFromMatch } from "./meaning"
 import { cachePath, folderCache } from "./folder"
+import { buildHostedMessages, HOSTED_MODEL, markHosted, markRequest, readHostedAnswer } from "./hosted"
 import { buildMarkMessages, MARK_PREFILL, parseMark, workForMarking } from "./prompt"
 
 const req = (o: Record<string, string>) =>
@@ -169,5 +170,70 @@ describe("keeping the models in a folder the student chose", () => {
     await expect(cache.put(url, new Response(broken))).rejects.toThrow("connection lost")
     expect(await cache.match(url)).toBeUndefined()
     expect(root.dirs["Academia AI models"].dirs["huggingface.co"].dirs["onnx-community"].dirs["Qwen3-4B-ONNX"].dirs.resolve.dirs.main.dirs.onnx.files).toEqual({})
+  })
+})
+
+describe("hosted marking (no download)", () => {
+  const input = {
+    programme: "MYP" as const,
+    year: 5,
+    subjectName: "Visual Arts",
+    taskType: "Summative assessment",
+    task: "Investigate an art movement.",
+    criteria: [
+      { id: "A", name: "Investigating", max: 8, asks: ["investigate a movement or genre", "critique an artwork or performance from it"] },
+      { id: "B", name: "Organisation", max: 10, asks: [] },
+    ],
+    text: "Impressionism began in Paris in the 1860s. Monet painted light.",
+  }
+  const reply = (body: unknown, init?: ResponseInit) => async () => new Response(JSON.stringify(body), init)
+  const answer = { criteria: [{ id: "a", why: "Explains the movement but the critique is thin.", improve: "Link each feature to its effect.", mark: 5 }, { id: "B", why: "Clear order.", improve: "Add headings.", mark: 11 }] }
+
+  it("sends the work once, with every criterion, its strands and the levels", () => {
+    const [system, user] = buildHostedMessages(input)
+    expect(system.content).toMatch(/IB Visual Arts teacher marking an MYP Year 5 student's work/)
+    expect(system.content).toMatch(/Be strict/)
+    expect(user.content).toContain("Criterion A: Investigating. The student should:")
+    expect(user.content).toContain("ii. critique an artwork or performance from it")
+    expect(user.content).toContain("Criterion B: Organisation.")
+    expect(user.content).toContain("The task was: Investigate an art movement.")
+    expect(user.content).toContain("7-8 excellent:")
+    expect(user.content.split("Impressionism began in Paris").length).toBe(2)
+  })
+
+  it("reads a mark per criterion, scaled to its maximum and kept inside the scale", () => {
+    expect(readHostedAnswer(JSON.stringify(answer), input.criteria)).toEqual({
+      A: { score: 5, why: "Explains the movement but the critique is thin.", improve: "Link each feature to its effect." },
+      B: { score: 10, why: "Clear order.", improve: "Add headings." }, // 11 is capped at 8 of 8, which is 10 of 10
+    })
+    expect(readHostedAnswer("not json", input.criteria)).toBeNull()
+    expect(readHostedAnswer(JSON.stringify({ criteria: [{ id: "Z", why: "", improve: "", mark: 3 }] }), input.criteria)).toBeNull()
+  })
+
+  it("asks the open model for a fixed answer shape and returns its marks", async () => {
+    let sent: { url: string; headers: Record<string, string>; body: { model: string; response_format: { type: string }; messages: unknown[] } } | undefined
+    const fetcher = (async (url: string, init: RequestInit) => {
+      sent = { url, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) }
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(answer) } }] }))
+    }) as unknown as typeof fetch
+    const result = await markHosted(input, "test-key", fetcher)
+    expect(result).toMatchObject({ ok: true, marks: { A: { score: 5 }, B: { score: 10 } } })
+    expect(sent?.url).toBe("https://api.groq.com/openai/v1/chat/completions")
+    expect(sent?.headers.Authorization).toBe("Bearer test-key")
+    expect(sent?.body.model).toBe(HOSTED_MODEL)
+    expect(sent?.body.response_format.type).toBe("json_schema")
+  })
+
+  it("reports a used-up allowance as busy, with when to try again, and anything else as failed", async () => {
+    expect(await markHosted(input, "k", reply({}, { status: 429, headers: { "retry-after": "12.4" } }) as unknown as typeof fetch)).toEqual({ ok: false, reason: "busy", retryAfter: 13 })
+    expect(await markHosted(input, "k", reply({}, { status: 500 }) as unknown as typeof fetch)).toEqual({ ok: false, reason: "failed" })
+    expect(await markHosted(input, "k", reply({ choices: [{ message: { content: "sorry" } }] }) as unknown as typeof fetch)).toEqual({ ok: false, reason: "failed" })
+    expect(await markHosted(input, "k", (async () => Promise.reject(new Error("offline"))) as unknown as typeof fetch)).toEqual({ ok: false, reason: "failed" })
+  })
+
+  it("rejects requests that aren't a marking request", () => {
+    expect(markRequest.safeParse(input).success).toBe(true)
+    expect(markRequest.safeParse({ ...input, criteria: [] }).success).toBe(false)
+    expect(markRequest.safeParse({ ...input, text: " " }).success).toBe(false)
   })
 })

@@ -18,7 +18,7 @@ function getWorker() {
 
 function call(req: Request, onMessage?: (message: WorkerResponse) => void, signal?: AbortSignal) {
   const id = nextId++
-  signal?.addEventListener("abort", () => getWorker().postMessage({ id, type: "cancel" }), { once: true })
+  signal?.addEventListener("abort", () => worker?.postMessage({ id, type: "cancel" }), { once: true })
   return new Promise<Extract<WorkerResponse, { type: "done" }>>((resolve, reject) => {
     listeners.set(id, (message) => {
       if (message.type === "done") resolve(message)
@@ -28,6 +28,14 @@ function call(req: Request, onMessage?: (message: WorkerResponse) => void, signa
     })
     getWorker().postMessage({ ...req, id } as WorkerRequest)
   })
+}
+
+/** Stops everything the on-device AI is doing at once, a download included, by shutting its worker down. The next request starts a new one. */
+export function stopAi() {
+  worker?.terminate()
+  worker = undefined
+  for (const listener of [...listeners.values()]) listener({ id: 0, type: "error", message: "stopped" })
+  listeners.clear()
 }
 
 export type Support = { ok: true } | { ok: false; reason: string }

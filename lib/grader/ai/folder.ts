@@ -2,6 +2,8 @@
 // storage, which sits on the drive the browser is installed on. Chrome and Edge on a computer only (File System Access API).
 // Used by the page (choosing the folder) and the worker (reading and writing the models).
 
+import { CHAT_MODEL } from "./protocol"
+
 type Permission = "granted" | "denied" | "prompt"
 /** A folder handle with the permission methods TypeScript's DOM types don't include yet. */
 export type Folder = FileSystemDirectoryHandle & {
@@ -67,6 +69,21 @@ export const allowFolder = async (folder: SavedFolder): Promise<SavedFolder> => 
 
 /** Goes back to the browser's own storage. The files in the folder are left for the student to delete. */
 export const forgetFolder = () => store("readwrite", (s) => s.delete(KEY))
+
+/**
+ * Whether the marking model is already on this device (in the chosen folder, or the browser's own storage),
+ * so that using it downloads nothing. Its two large files are the last to arrive.
+ */
+export async function modelDownloaded(folder: SavedFolder | null): Promise<boolean> {
+  const files = ["onnx/model_q4f16.onnx_data", "onnx/model_q4f16.onnx_data_1"].map((f) => `https://huggingface.co/${CHAT_MODEL}/resolve/main/${f}`)
+  try {
+    if (folder && !folder.granted) return false
+    const cache = folder ? folderCache(folder.handle) : await caches.open("transformers-cache")
+    return (await Promise.all(files.map((f) => cache.match(f)))).every(Boolean)
+  } catch {
+    return false
+  }
+}
 
 /** Where a cached file lives inside the chosen folder: the address it was downloaded from, as folders. */
 export function cachePath(key: string): string[] {
