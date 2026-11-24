@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
-import { AiFeedback } from "@/components/grader/ai-feedback"
+import { AiPanel, useAiMarks } from "@/components/grader/ai-marker"
 import { matchTask } from "@/lib/grader/ai/client"
-import type { FeedbackInput } from "@/lib/grader/ai/prompt"
+import { parseMark, type MarkInput } from "@/lib/grader/ai/prompt"
 import { builtInRubric, isLanguageGroup, taskExample, taskTypesFor, WRITING_MODES, type GradeResult, type TaskType } from "@/lib/grader/rubrics"
+import { DEFAULT_DP_BOUNDARIES, mypGradeFromTotal, percentToGrade } from "@/lib/grades"
 import { SUBJECT_GROUPS } from "@/lib/ib"
 
 const OTHER = "__other"
@@ -77,7 +78,7 @@ export function TaskGrader() {
   const [steps, setSteps] = useState<Stage[]>([])
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GradeResult | null>(null)
-  const [feedback, setFeedback] = useState<FeedbackInput | null>(null)
+  const [feedback, setFeedback] = useState<MarkInput | null>(null)
   const [gradeNo, setGradeNo] = useState(0)
   const [chosenType, setChosenType] = useState<TaskType>("Summative assessment")
   const [otherGroup, setOtherGroup] = useState("")
@@ -165,16 +166,17 @@ export function TaskGrader() {
       else {
         const graded = json as GradeResult
         setResult(graded)
+        // What the on-device AI can mark: enough text, and the criteria judged from written work.
+        const markable = graded.criteria.flatMap(({ id, name, max, asks }) => (asks ? [{ id, name, max, asks }] : []))
         setFeedback(
-          work.trim().split(/\s+/).length >= 20
+          work.trim().split(/\s+/).length >= 20 && markable.length
             ? {
                 programme: String(fd.get("programme")) === "DP" ? "DP" : "MYP",
                 year: Number(fd.get("year")) || 1,
                 subjectName: String(fd.get("subjectName") ?? ""),
                 taskType,
-                mode: graded.mode,
                 task,
-                criteria: graded.criteria.map(({ id, name, score, max }) => ({ id, name, score, max })),
+                criteria: markable,
                 text: work,
               }
             : null,
@@ -441,7 +443,7 @@ export function TaskGrader() {
 
       <div className="lg:col-span-3" aria-live="polite">
         {result ? (
-          <Evaluation result={result} feedback={feedback && <AiFeedback key={gradeNo} input={feedback} />} />
+          <Evaluation key={gradeNo} result={result} markInput={feedback} />
         ) : (
           <Panel>
             <div className="grid gap-5 py-6">
@@ -487,43 +489,83 @@ function List({ title, items }: { title: string; items: string[] }) {
   )
 }
 
-function Evaluation({ result, feedback }: { result: GradeResult; feedback: ReactNode }) {
-  const total = result.criteria.reduce((a, c) => a + c.score, 0)
-  const max = result.criteria.reduce((a, c) => a + c.max, 0)
+function Evaluation({ result, markInput }: { result: GradeResult; markInput: MarkInput | null }) {
+  const ai = useAiMarks(markInput)
+  // With the on-device AI on, its mark and comment replace the checklist estimate for each criterion it can mark.
+  const criteria = result.criteria.map((c) => {
+    const reply = ai.on ? ai.replies[c.id] : undefined
+    const marked = reply === undefined ? null : parseMark(reply, c.max)
+    const byAi = marked?.score != null
+    return { ...c, score: marked?.score ?? c.score, marked: byAi ? marked : null, waiting: ai.on && !ai.settled && !!c.asks && !byAi }
+  })
+  const waiting = criteria.some((c) => c.waiting)
+  const byAi = criteria.some((c) => c.marked)
+  const total = criteria.reduce((a, c) => a + c.score, 0)
+  const max = criteria.reduce((a, c) => a + c.max, 0)
+  const grade = !byAi ? result.overall_grade : markInput?.programme === "MYP" ? mypGradeFromTotal(Math.round((total / max) * 32)) : percentToGrade((total / max) * 100, DEFAULT_DP_BOUNDARIES)
+  const summary = byAi
+    ? `Marked by the on-device AI: ${criteria.map((c) => `${c.name} ${c.score}/${c.max}${c.marked ? "" : " (checklist estimate)"}`).join(", ")}.`
+    : result.summary
   return (
     <div className="grid gap-4">
       {/* A 1–7 grade needs every criterion. With only some ticked, show the marks (out of 8 each in the MYP). */}
-      <Panel title={result.partial ? "Estimated mark" : "Estimated grade"}>
+      <Panel title={`${byAi || waiting ? "AI" : "Estimated"} ${result.partial ? "mark" : "grade"}`}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          {result.partial ? (
+          {waiting ? (
+            <Loader2 className="size-10 animate-spin text-muted-foreground" aria-hidden="true" />
+          ) : result.partial ? (
             <span className="inline-flex items-baseline gap-0.5 font-mono font-semibold tracking-tight tabular-nums">
               <span className="text-7xl">{total}</span>
               <span className="text-sm font-medium text-muted-foreground">/{max}</span>
             </span>
           ) : (
             <div className="grid justify-items-start gap-1">
-              <GradeNumber grade={result.overall_grade} size="xl" />
+              <GradeNumber grade={grade} size="xl" />
               <span className="text-xs text-muted-foreground tabular-nums">
                 {total}/{max} marks
               </span>
             </div>
           )}
-          <p className="text-sm">{result.summary}</p>
+          <p className="text-sm">{waiting ? "The AI is reading and marking your work. Each mark appears below as soon as it is ready." : summary}</p>
         </div>
       </Panel>
 
-      {feedback}
+      <AiPanel ai={ai} />
 
-      {result.criteria.map((c) => (
-        <Panel key={c.id} title={`Criterion ${c.id}: ${c.name}`} action={<span className="font-mono text-lg font-semibold tabular">{c.score}<span className="text-sm text-muted-foreground">/{c.max}</span></span>}>
-          <div className="grid gap-3">
-            <div className="h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${c.score} out of ${c.max}`}>
-              <div className="h-full rounded-full bg-primary" style={{ width: `${c.max ? Math.min(100, (c.score / c.max) * 100) : 0}%` }} />
+      {criteria.map((c) => (
+        <Panel
+          key={c.id}
+          title={`Criterion ${c.id}: ${c.name}`}
+          action={
+            c.waiting ? (
+              <Loader2 className="size-5 animate-spin text-muted-foreground" aria-label="Waiting for the AI" />
+            ) : (
+              <span className="font-mono text-lg font-semibold tabular">{c.score}<span className="text-sm text-muted-foreground">/{c.max}</span></span>
+            )
+          }
+        >
+          {c.waiting ? (
+            <p className="text-sm text-muted-foreground">Waiting for the AI&apos;s mark…</p>
+          ) : (
+            <div className="grid gap-3">
+              <div className="h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${c.score} out of ${c.max}`}>
+                <div className="h-full rounded-full bg-primary" style={{ width: `${c.max ? Math.min(100, (c.score / c.max) * 100) : 0}%` }} />
+              </div>
+              {c.marked ? (
+                // The AI read the work, so its comment replaces the checklist's band line and lists.
+                <>
+                  {c.marked.why && <p className="text-sm">{c.marked.why}</p>}
+                  {c.marked.improve && <p className="text-sm"><span className="font-medium">To improve: </span>{c.marked.improve}</p>}
+                </>
+              ) : (
+                <>
+                  <p className="text-sm"><span className="font-medium">Band {c.band}.</span> {c.justification}</p>
+                  <List title="Strengths" items={c.strengths} />
+                  <List title="To improve" items={c.improvements} />
+                </>
+              )}
             </div>
-            <p className="text-sm"><span className="font-medium">Band {c.band}.</span> {c.justification}</p>
-            <List title="Strengths" items={c.strengths} />
-            <List title="To improve" items={c.improvements} />
-          </div>
+          )}
         </Panel>
       ))}
 

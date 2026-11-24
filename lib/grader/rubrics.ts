@@ -374,6 +374,8 @@ export interface CriterionResult {
   justification: string
   strengths: string[]
   improvements: string[]
+  /** What the criterion asks for (its strands), for the on-device AI marker. Absent when it is judged from a performance or artwork, which the AI can't see. */
+  asks?: string[]
 }
 
 export interface GradeResult {

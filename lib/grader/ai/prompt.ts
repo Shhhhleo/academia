@@ -1,97 +1,73 @@
-import type { Mode } from "@/lib/grader/rubrics"
 import type { ChatMessage } from "./protocol"
 
-export interface FeedbackInput {
+export interface MarkInput {
   programme: "MYP" | "DP"
   year: number
   subjectName: string
   taskType: string
-  mode: Mode
   task?: string
-  criteria: { id: string; name: string; score: number; max: number }[]
+  /** The criteria the AI can mark, each with what it asks for (its strands). */
+  criteria: { id: string; name: string; max: number; asks: string[] }[]
   text: string
 }
 
-const MODE_WORDS: Record<Mode, string> = {
-  analytical: "an analytical piece",
-  narrative: "a narrative or descriptive piece",
-  persuasive: "a persuasive piece",
-  informative: "an informative piece",
+// shortcut: a 4 GB graphics card holds about 2,400 words of work beside the model; longer work is read from both ends. Raise when models that list fewer scores per token are published.
+const MAX_WORDS = 2400
+const HEAD_WORDS = 1800
+
+/** The work as the model reads it, and whether the middle was cut out. */
+export function workForMarking(text: string) {
+  const words = text.trim().split(/\s+/)
+  if (words.length <= MAX_WORDS) return { work: text.trim(), cut: false }
+  return { work: `${words.slice(0, HEAD_WORDS).join(" ")}\n[…]\n${words.slice(HEAD_WORDS - MAX_WORDS).join(" ")}`, cut: true }
 }
 
-// shortcut: a 1.7B model reads about 900 words well on a laptop; longer work is cut, and the grade above covers all of it.
-const MAX_WORDS = 900
+const NUMERALS = ["i", "ii", "iii", "iv", "v", "vi"]
 
-/** Chat messages asking the on-device model for feedback on this piece, criterion by criterion. */
-export function buildFeedbackMessages(input: FeedbackInput): ChatMessage[] {
-  const words = input.text.trim().split(/\s+/)
-  const work = words.slice(0, MAX_WORDS).join(" ") + (words.length > MAX_WORDS ? " […]" : "")
-  const criteria = input.criteria.map((c) => `- Criterion ${c.id} (${c.name}): estimated ${c.score}/${c.max}`).join("\n")
-  const format = input.criteria.map((c) => `Criterion ${c.id} (${c.name})\nStrength: …\nImprove: …`).join("\n\n")
+/**
+ * Chat messages asking the on-device model to mark the work on one criterion.
+ * Every criterion is marked on the MYP's 0–8 scale (two marks per level) and scaled to its own maximum by parseMark.
+ */
+export function buildMarkMessages(input: MarkInput, criterion: MarkInput["criteria"][number]): ChatMessage[] {
+  const student = input.programme === "MYP" ? `an MYP Year ${input.year}` : "a Diploma Programme"
+  const asks = criterion.asks.length ? ` The student should:\n${criterion.asks.map((a, i) => `${NUMERALS[i] ?? i + 1}. ${a}`).join("\n")}` : ""
   return [
     {
       role: "system",
-      content:
-        "You are an experienced IB teacher giving written feedback to a student. Be specific, honest and encouraging. Only talk about what is actually in the student's work, quoting short phrases from it. Do not change or invent marks. Keep each line to one or two sentences.",
+      content: `You are an experienced IB ${input.subjectName} teacher marking ${student} student's work against one criterion. You give the mark a moderator would agree with. Be strict: long, fluent or well-referenced work is not automatically good. Judge the depth, accuracy and relevance of the thinking, and whether each part really does what the criterion asks.`,
     },
     {
       role: "user",
-      content: `Programme: ${input.programme} year ${input.year}, ${input.subjectName}. Task type: ${input.taskType}. This is ${MODE_WORDS[input.mode]}.
-${input.task?.trim() ? `The task was: ${input.task.trim()}\n` : ""}
-Criteria being assessed:
-${criteria}
+      content: `Criterion ${criterion.id}: ${criterion.name} (0 to 8).${asks}
+${input.task?.trim() ? `\nThe task was: ${input.task.trim()}\n` : ""}
+Levels:
+1-2 limited: lists a few facts or steps with little explanation; mostly description; gaps or errors
+3-4 adequate: covers the main points with some explanation, but parts are thin, generic, descriptive or not linked together
+5-6 substantial: detailed and mostly accurate, explains reasons and effects, clearly linked to the task or statement of inquiry, with some depth missing
+7-8 excellent: thorough, accurate and insightful throughout, precise subject vocabulary, every part justified and linked to the task or statement of inquiry
 
-The student's work:
+The student's work (${input.taskType}):
 """
-${work}
+${workForMarking(input.text).work}
 """
 
-For each criterion, write one strength (quote a short phrase from the work) and one specific improvement (quote the words to change and show a better version). Then end with "Next step:" and the single most useful thing to do next. Use exactly this layout:
-
-${format}
-
-Next step: …`,
+Mark the work on Criterion ${criterion.id}. Answer in exactly this layout:
+Mark: a whole number from 0 to 8
+Why: one sentence on what the work does well and what it lacks for this criterion
+To improve: one sentence with the single most useful change /no_think`,
     },
   ]
 }
 
-export interface ParsedFeedback {
-  blocks: { title: string; strength: string; improve: string }[]
-  next: string
-}
+/** The start of the model's answer, written for it: the next thing it writes is the mark, so the mark arrives first. */
+export const MARK_PREFILL = "<think>\n\n</think>\n\nMark: "
 
-/**
- * Splits the model's answer (the layout asked for above) into a block per criterion and the next step.
- * Null when it wrote something else, so the page can show the text as it is.
- */
-export function parseFeedback(text: string): ParsedFeedback | null {
-  const blocks: ParsedFeedback["blocks"] = []
-  let next = ""
-  let field: "strength" | "improve" | "next" | null = null
-  for (const raw of text.split("\n")) {
-    const line = raw.replace(/\*\*/g, "").replace(/^#+\s*/, "").trim()
-    if (!line) continue
-    if (/^Criterion\s+[A-Z]\d?\b/i.test(line)) {
-      blocks.push({ title: line.replace(/:$/, ""), strength: "", improve: "" })
-      field = null
-      continue
-    }
-    const labelled = line.match(/^[-•*]?\s*(Strength|Improve(?:ment)?|Next step)s?\s*:\s*(.*)$/i)
-    if (labelled) {
-      field = /^next/i.test(labelled[1]) ? "next" : /^strength/i.test(labelled[1]) ? "strength" : "improve"
-      if (field === "next") next = labelled[2]
-      else {
-        if (!blocks.length) blocks.push({ title: "", strength: "", improve: "" })
-        blocks[blocks.length - 1][field] = labelled[2]
-      }
-      continue
-    }
-    if (field === "next") next += ` ${line}`
-    else if (field && blocks.length) blocks[blocks.length - 1][field] += ` ${line}`
-    else return null
-  }
-  return blocks.length || next ? { blocks, next } : null
-}
+/** Room for the mark and two sentences. */
+export const MARK_TOKENS = 100
 
-/** Enough room for two lines per criterion plus the next step, without letting a small model ramble. */
-export const feedbackTokens = (criteria: number) => Math.min(600, 110 * criteria + 70)
+/** Reads the model's answer (which continues MARK_PREFILL): the mark scaled to the criterion's maximum, and its two comments. */
+export function parseMark(reply: string, max: number) {
+  const level = reply.match(/^\s*([0-8])(?!\d)/)?.[1]
+  const field = (label: string) => reply.match(new RegExp(`^${label}:[ \\t]*(.+)$`, "im"))?.[1].replace(/\*\*/g, "").trim() ?? ""
+  return { score: level === undefined ? null : Math.round((Number(level) / 8) * max), why: field("Why"), improve: field("To improve") }
+}

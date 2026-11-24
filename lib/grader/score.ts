@@ -308,7 +308,7 @@ function scoreCriterion(
                     : "paragraphing, linking words and referencing"
             }.`
 
-  return { id: c.id, name: c.name, score, max: c.max, band, justification, strengths, improvements, fraction }
+  return { id: c.id, name: c.name, score, max: c.max, band, justification, strengths, improvements, fraction, asks: c.cap ? undefined : (c.strands ?? []).map((x) => x.does) }
 }
 
 /** Reads criteria out of a student-supplied rubric, e.g. "Criterion A: Analysing (0–8)". */
@@ -458,7 +458,7 @@ export function gradeTask(input: GradeRequest, text: string): GradeResult {
     overall_grade: overall,
     partial,
     summary,
-    criteria: results.map((r) => ({ id: r.id, name: r.name, score: r.score, max: r.max, band: r.band, justification: r.justification, strengths: r.strengths, improvements: r.improvements })),
+    criteria: results.map((r) => ({ id: r.id, name: r.name, score: r.score, max: r.max, band: r.band, justification: r.justification, strengths: r.strengths, improvements: r.improvements, asks: r.asks })),
     next_steps: next,
     caveats: caveats.join(" "),
     mode,
