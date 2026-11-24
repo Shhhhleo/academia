@@ -6,7 +6,7 @@ import { TaskGrader } from "@/components/grader/task-grader"
 export const metadata: Metadata = { title: "Task Grader" }
 
 export default async function GraderPage({ searchParams }: PageProps<"/grader">) {
-  // /grader?preview=1 skips the maintenance pop-up, so the feature can be tested while it is closed.
+  // /grader?preview=1 skips the maintenance pop-up on the live site, so the feature can be tested there while it is closed.
   const preview = (await searchParams).preview === "1"
   return (
     <>
