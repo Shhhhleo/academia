@@ -2,11 +2,11 @@ import type { ReactNode } from "react"
 import Link from "next/link"
 import { Wrench } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
-import { UNDER_MAINTENANCE } from "@/lib/maintenance"
+import { maintenanceNote } from "@/lib/maintenance"
 
-/** Blurs a feature's page behind an "Under maintenance" pop-up while it is listed in UNDER_MAINTENANCE. */
+/** Blurs a feature's page behind an "Under maintenance" pop-up while it is listed in UNDER_MAINTENANCE (never on localhost). */
 export function MaintenanceGate({ feature, preview = false, children }: { feature: string; preview?: boolean; children: ReactNode }) {
-  const note = UNDER_MAINTENANCE[feature]
+  const note = maintenanceNote(feature)
   if (!note || preview) return <>{children}</>
   return (
     <div className="relative">

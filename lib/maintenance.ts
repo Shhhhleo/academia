@@ -5,3 +5,6 @@
 export const UNDER_MAINTENANCE: Record<string, string> = {
   grader: "We're improving how the Task Grader marks every IB subject. It will be back soon.",
 }
+
+/** The note to show if the feature is closed. Nothing is closed on localhost (`next dev`), where the features being fixed are worked on. */
+export const maintenanceNote = (feature: string): string | undefined => (process.env.NODE_ENV === "development" ? undefined : UNDER_MAINTENANCE[feature])
